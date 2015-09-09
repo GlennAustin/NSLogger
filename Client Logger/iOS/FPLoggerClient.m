@@ -268,7 +268,7 @@ FPLoggerClient *LoggerInit(void)
 #if LOGGER_DEBUG
 	// when debugging NSLogger itself, don't hijack the system console
 	// as we are sending messages to it for display
-	logger->options &= ~kLoggerOption_CaptureSystemConsole;
+	logger->options &= ~kFPLoggerOption_CaptureSystemConsole;
 #endif
 
 	logger->quit = NO;
@@ -304,8 +304,8 @@ void LoggerSetOptions(FPLoggerClient *logger, uint32_t options)
 	// If we choose to log to system console
 	// make sure we are not configured to capture the system console
 	// When debugging NSLogger itself, we never capture the system console either
-	if (options & kLoggerOption_LogToConsole)
-		options &= (uint32_t)~kLoggerOption_CaptureSystemConsole;
+	if (options & kFPLoggerOption_LogToConsole)
+		options &= (uint32_t)~kFPLoggerOption_CaptureSystemConsole;
 
 	if (logger == NULL)
 		logger = LoggerGetDefaultLogger();
@@ -405,7 +405,7 @@ FPLoggerClient *LoggerStart(FPLoggerClient *logger)
 				pthread_create(&logger->workerThread, NULL, (void *(*)(void *))&LoggerWorkerThread, logger);
 				
 				// Grab console output if required
-				if (logger->options & kLoggerOption_CaptureSystemConsole)
+				if (logger->options & kFPLoggerOption_CaptureSystemConsole)
 					LoggerStartGrabbingConsole(logger);
 			});
         }
@@ -533,7 +533,7 @@ static BOOL LoggerPrepareRunloopSource(FPLoggerClient *logger, CFRunLoopSourceRe
 	if (*outRef == NULL)
 	{
 		// This NSLog is intentional as this failure MUST be logged to console
-		NSLog(@"*** NSLogger: worker thread failed creating runloop source");
+		NSLog(@"*** FPLogger: worker thread failed creating runloop source");
 		return NO;
 	}
 	CFRunLoopAddSource(CFRunLoopGetCurrent(), *outRef, kCFRunLoopDefaultMode);
@@ -569,8 +569,8 @@ static void *LoggerWorkerThread(FPLoggerClient *logger)
 	{
 		// Failing to create the runloop source for pushing messages is a major failure.
 		// This NSLog is intentional. We WANT console output in this case
-		NSLog(@"*** NSLogger: switching to console logging.");
-		logger->options |= kLoggerOption_LogToConsole;
+		NSLog(@"*** FPLogger: switching to console logging.");
+		logger->options |= kFPLoggerOption_LogToConsole;
 		logger->workerThread = NULL;
 		return NULL;
 	}
@@ -643,7 +643,7 @@ static void *LoggerWorkerThread(FPLoggerClient *logger)
 
 	// if the client ever tries to log again against us, make sure that logs at least
 	// go to console
-	logger->options |= kLoggerOption_LogToConsole;
+	logger->options |= kFPLoggerOption_LogToConsole;
 	logger->workerThread = NULL;
 	
 	LOGGERDBG(CFSTR("Stop LoggerWorkerThread"));
@@ -869,7 +869,7 @@ static void LoggerLogToConsole(CFDataRef data)
 
 static void LoggerWriteMoreData(FPLoggerClient *logger)
 {
-	uint32_t logToConsole = (logger->options & kLoggerOption_LogToConsole);
+	uint32_t logToConsole = (logger->options & kFPLoggerOption_LogToConsole);
 	
 	if (!logger->connected)
 	{
@@ -888,7 +888,7 @@ static void LoggerWriteMoreData(FPLoggerClient *logger)
 		{
 			LoggerFlushQueueToBufferStream(logger, NO);
 		}
-        else if (!(logger->options & kLoggerOption_BufferLogsUntilConnection))
+        else if (!(logger->options & kFPLoggerOption_BufferLogsUntilConnection))
         {
             /* No client connected
              * User don't want to log to console
@@ -1183,7 +1183,7 @@ static void LoggerStopConsoleRedirection()
 
 static void LoggerStartGrabbingConsole(FPLoggerClient *logger)
 {
-	if (!(logger->options & kLoggerOption_CaptureSystemConsole))
+	if (!(logger->options & kFPLoggerOption_CaptureSystemConsole))
 		return;
 
 	pthread_mutex_lock(&consoleGrabbersMutex);
@@ -1270,7 +1270,7 @@ static void LoggerCreateBufferWriteStream(FPLoggerClient *logger)
 	}
 	if (logger->bufferWriteStream == NULL)
 	{
-		CFShow(CFSTR("NSLogger Warning: failed opening buffer file for writing:"));
+		CFShow(CFSTR("FPLogger Warning: failed opening buffer file for writing:"));
 		CFShow(logger->bufferFile);
 	}
 }
@@ -1357,7 +1357,7 @@ static void LoggerFlushQueueToBufferStream(FPLoggerClient *logger, BOOL firstEnt
 		if (written != dataLength)
 		{
 			// couldn't write all data to file, maybe storage run out of space?
-			CFShow(CFSTR("NSLogger Error: failed flushing the whole queue to buffer file:"));
+			CFShow(CFSTR("FPLogger Error: failed flushing the whole queue to buffer file:"));
 			CFShow(logger->bufferFile);
 			break;
 		}
@@ -1383,18 +1383,18 @@ static void LoggerStartBonjourBrowsing(FPLoggerClient *logger)
 {
 	if (!logger->targetReachable ||
 		logger->bonjourDomainBrowser != NULL ||
-		!(logger->options & kLoggerOption_BrowseBonjour))
+		!(logger->options & kFPLoggerOption_BrowseBonjour))
 		return;
 
 	LOGGERDBG(CFSTR("LoggerStartBonjourBrowsing"));
 	
-	if (logger->options & kLoggerOption_BrowseOnlyLocalDomain)
+	if (logger->options & kFPLoggerOption_BrowseOnlyLocalDomain)
 	{
 		LOGGERDBG(CFSTR("FPLoggerClient configured to search only the local domain, searching for services on: local."));
 		if (!LoggerBrowseBonjourForServices(logger, CFSTR("local.")) && logger->host == NULL)
 		{
 			LOGGERDBG(CFSTR("*** FPLoggerClient: could not browse for services in domain local., no remote host configured: reverting to console logging. ***"));
-			logger->options |= kLoggerOption_LogToConsole;
+			logger->options |= kFPLoggerOption_LogToConsole;
 		}
 	}
 	else
@@ -1412,7 +1412,7 @@ static void LoggerStartBonjourBrowsing(FPLoggerClient *logger)
 			CFRelease(logger->bonjourDomainBrowser);
 			logger->bonjourDomainBrowser = NULL;
 			if (logger->host == NULL)
-				logger->options |= kLoggerOption_LogToConsole;
+				logger->options |= kFPLoggerOption_LogToConsole;
 		}
 	}
 }
@@ -1461,7 +1461,7 @@ static BOOL LoggerBrowseBonjourForServices(FPLoggerClient *logger, CFStringRef d
 	CFStringRef serviceType = logger->bonjourServiceType;
 	if (serviceType == NULL)
 	{
-		if (logger->options & kLoggerOption_UseSSL)
+		if (logger->options & kFPLoggerOption_UseSSL)
 			serviceType = FPLOGGER_LOGGER_SERVICE_TYPE_SSL;
 		else
 			serviceType = FPLOGGER_LOGGER_SERVICE_TYPE;
@@ -1587,7 +1587,7 @@ static void LoggerRemoteSettingsChanged(FPLoggerClient *logger)
 	// Always terminate any ongoing connection first
 	LoggerWriteStreamTerminated(logger);
 
-	if (logger->host == NULL && !(logger->options & kLoggerOption_BrowseBonjour))
+	if (logger->host == NULL && !(logger->options & kFPLoggerOption_BrowseBonjour))
 	{
 		// developer doesn't want any network connection
 		LoggerStopBonjourBrowsing(logger);
@@ -1601,7 +1601,7 @@ static void LoggerRemoteSettingsChanged(FPLoggerClient *logger)
 		LoggerStartReachabilityChecking(logger);
 		if (logger->targetReachable)
 		{
-			if (logger->options & kLoggerOption_BrowseBonjour)
+			if (logger->options & kFPLoggerOption_BrowseBonjour)
 				LoggerStartBonjourBrowsing(logger);
 			else
 				LoggerStopBonjourBrowsing(logger);
@@ -1702,7 +1702,7 @@ static void LoggerReachabilityCallBack(SCNetworkReachabilityRef target, SCNetwor
 static void LoggerStartReconnectTimer(FPLoggerClient *logger)
 {
 	// start a timer that will try to reconnect every 5 seconds
-	if (logger->reconnectTimer == NULL && (logger->host != NULL || (logger->options & kLoggerOption_BrowseBonjour)))
+	if (logger->reconnectTimer == NULL && (logger->host != NULL || (logger->options & kFPLoggerOption_BrowseBonjour)))
 	{
 		LOGGERDBG(CFSTR("Starting the reconnect timer"));
 		CFRunLoopTimerContext timerCtx = {
@@ -1774,7 +1774,7 @@ static BOOL LoggerConfigureAndOpenStream(FPLoggerClient *logger)
 							   &LoggerWriteStreamCallback,
 							   &context))
 	{
-		if (logger->options & kLoggerOption_UseSSL)
+		if (logger->options & kFPLoggerOption_UseSSL)
 		{
 			// Configure stream to require a SSL connection
 			LOGGERDBG(CFSTR("-> configuring SSL"));
@@ -1901,7 +1901,7 @@ static void LoggerTryConnect(FPLoggerClient *logger)
 	}
 	
 	// Finally, if Bonjour is enabled and not started yet, start it now.
-	if (logger->options & kLoggerOption_BrowseBonjour)
+	if (logger->options & kFPLoggerOption_BrowseBonjour)
 	{
 		if (logger->bonjourDomainBrowser == NULL || CFArrayGetCount(logger->bonjourServiceBrowsers) == 0)
 		{
@@ -1953,7 +1953,7 @@ static void LoggerWriteStreamTerminated(FPLoggerClient *logger)
 
 	// tryConnect will take care of setting up the reconnect timer if needed
 	if (logger->targetReachable &&
-		(logger->host != NULL || (logger->options & kLoggerOption_BrowseBonjour)))
+		(logger->host != NULL || (logger->options & kFPLoggerOption_BrowseBonjour)))
 		LoggerTryConnect(logger);
 }
 
@@ -2083,7 +2083,7 @@ static void LoggerMessageAddTimestampAndThreadID(CFMutableDataRef encoder)
 		{
 			// use the thread dictionary to store and retrieve the computed thread name
 			NSMutableDictionary *threadDict = [thread threadDictionary];
-			name = [threadDict objectForKey:@"__$NSLoggerThreadName$__"];
+			name = [threadDict objectForKey:@"__$FPLoggerThreadName$__"];
 			if (name == nil)
 			{
 				@autoreleasepool {
@@ -2106,7 +2106,7 @@ static void LoggerMessageAddTimestampAndThreadID(CFMutableDataRef encoder)
 						name = [NSString stringWithFormat:@"Thread %@",
 														  [name substringWithRange:NSMakeRange(range.location + range.length,
 																							   [name length] - range.location - range.length - 1)]];
-						[threadDict setObject:name forKey:@"__$NSLoggerThreadName$__"];
+						[threadDict setObject:name forKey:@"__$FPLoggerThreadName$__"];
 					}
                     else
                     {
@@ -2438,7 +2438,7 @@ static void LoggerPushMessageToQueue(FPLoggerClient *logger, CFDataRef message)
 		// to fire the runLoop source
 		CFRunLoopSourceSignal(logger->messagePushedSource);
 	}
-	else if (logger->workerThread == NULL && (logger->options & kLoggerOption_LogToConsole))
+	else if (logger->workerThread == NULL && (logger->options & kFPLoggerOption_LogToConsole))
 	{
 		// In this case, a failure creating the message runLoop source forces us
 		// to always log to console
@@ -2813,7 +2813,7 @@ void LogEndBlockTo(FPLoggerClient *logger)
 	logger = LoggerStart(logger);
     if (logger)
     {
-        if (logger->options & kLoggerOption_LogToConsole)
+        if (logger->options & kFPLoggerOption_LogToConsole)
             return;
 
         int32_t seq = OSAtomicIncrement32Barrier(&logger->messageSeq);

@@ -46,7 +46,7 @@
 
 // This define is here so that user application can test whether NSLogger Client is
 // being included in the project, and potentially configure their macros accordingly
-#define NSLOGGER_WAS_HERE		1
+#define FPLOGGER_WAS_HERE		1
 
 // Set this to 0 if you absolutely NOT want any access to Cocoa (Objective-C, NS* calls)
 // We need a couple ones to reliably obtain the thread number and device information
@@ -54,26 +54,28 @@
 // we need to put Cocoa in multithreading mode. Also, ALLOW_COCOA_USE allows the client code
 // to use NSLog()-style message formatting (less verbose than CFShow()-style) through the
 // use of -[NSString stringWithFormat:arguments:]
+#ifndef ALLOW_COCOA_USE
 #define	ALLOW_COCOA_USE			1
+#endif
 
 /* -----------------------------------------------------------------
  * FPLoggerClient option flags & default options
  * -----------------------------------------------------------------
  */
 enum {
-	kLoggerOption_LogToConsole						= 0x01,
-	kLoggerOption_BufferLogsUntilConnection			= 0x02,
-	kLoggerOption_BrowseBonjour						= 0x04,
-	kLoggerOption_BrowseOnlyLocalDomain				= 0x08,
-	kLoggerOption_UseSSL							= 0x10,
-	kLoggerOption_CaptureSystemConsole				= 0x20
+	kFPLoggerOption_LogToConsole						= 0x01,
+	kFPLoggerOption_BufferLogsUntilConnection			= 0x02,
+	kFPLoggerOption_BrowseBonjour						= 0x04,
+	kFPLoggerOption_BrowseOnlyLocalDomain				= 0x08,
+	kFPLoggerOption_UseSSL							= 0x10,
+	kFPLoggerOption_CaptureSystemConsole				= 0x20
 };
 
-#define LOGGER_DEFAULT_OPTIONS	(kLoggerOption_BufferLogsUntilConnection |	\
-								 kLoggerOption_BrowseBonjour |				\
-								 kLoggerOption_BrowseOnlyLocalDomain |		\
-								 kLoggerOption_UseSSL |						\
-								 kLoggerOption_CaptureSystemConsole)
+#define LOGGER_DEFAULT_OPTIONS	(kFPLoggerOption_BufferLogsUntilConnection |	\
+								 kFPLoggerOption_BrowseBonjour |				\
+								 kFPLoggerOption_BrowseOnlyLocalDomain |		\
+								 kFPLoggerOption_UseSSL |						\
+								 kFPLoggerOption_CaptureSystemConsole)
 
 /* -----------------------------------------------------------------
  * Structure defining a FPLoggerClient
@@ -138,22 +140,22 @@ extern "C" {
 
 // Prevents the linker from stripping NSLogger functions
 // This is mainly for linked frameworks to be able to use NSLogger dynamically.
-// If you DO WANT this functionality, you need to define NSLOGGER_ALLOW_NOSTRIP
+// If you DO WANT this functionality, you need to define FPLOGGER_ALLOW_NOSTRIP
 // somewhere in the header files included before this one.
-#ifdef NSLOGGER_ALLOW_NOSTRIP
-#define NSLOGGER_NOSTRIP __attribute__((used))
+#ifdef FPLOGGER_ALLOW_NOSTRIP
+#define FPLOGGER_NOSTRIP __attribute__((used))
 #else
-#define NSLOGGER_NOSTRIP
+#define FPLOGGER_NOSTRIP
 #endif
 
 // Set the default logger which will be the one used when passing NULL for logge
-extern void LoggerSetDefaultLogger(FPLoggerClient *aLogger) NSLOGGER_NOSTRIP;
+extern void LoggerSetDefaultLogger(FPLoggerClient *aLogger) FPLOGGER_NOSTRIP;
 
 // Get the default logger, create one if it does not exist
-extern FPLoggerClient *LoggerGetDefaultLogger(void) NSLOGGER_NOSTRIP;
+extern FPLoggerClient *LoggerGetDefaultLogger(void) FPLOGGER_NOSTRIP;
 
 // Checks whether the default logger exists, returns it if YES, otherwise do NO create one
-extern FPLoggerClient *LoggerCheckDefaultLogger(void) NSLOGGER_NOSTRIP;
+extern FPLoggerClient *LoggerCheckDefaultLogger(void) FPLOGGER_NOSTRIP;
 
 // Initialize a new logger, set as default logger if this is the first one
 // Options default to:
@@ -161,18 +163,18 @@ extern FPLoggerClient *LoggerCheckDefaultLogger(void) NSLOGGER_NOSTRIP;
 // - buffer until connection = YES
 // - browse Bonjour = YES
 // - browse only locally on Bonjour = YES
-extern FPLoggerClient* LoggerInit(void) NSLOGGER_NOSTRIP;
+extern FPLoggerClient* LoggerInit(void) FPLOGGER_NOSTRIP;
 
 // Set logger options if you don't want the default options (see above)
-extern void LoggerSetOptions(FPLoggerClient *logger, uint32_t options) NSLOGGER_NOSTRIP;
+extern void LoggerSetOptions(FPLoggerClient *logger, uint32_t options) FPLOGGER_NOSTRIP;
 
 // Set Bonjour logging names, so you can force the logger to use a specific service type
 // or direct logs to the machine on your network which publishes a specific name
-extern void LoggerSetupBonjour(FPLoggerClient *logger, CFStringRef bonjourServiceType, CFStringRef bonjourServiceName) NSLOGGER_NOSTRIP;
+extern void LoggerSetupBonjour(FPLoggerClient *logger, CFStringRef bonjourServiceType, CFStringRef bonjourServiceName) FPLOGGER_NOSTRIP;
 
 // Directly set the viewer host (hostname or IP address) and port we want to connect to. If set, LoggerStart() will
 // try to connect there first before trying Bonjour
-extern void LoggerSetViewerHost(FPLoggerClient *logger, CFStringRef hostName, UInt32 port) NSLOGGER_NOSTRIP;
+extern void LoggerSetViewerHost(FPLoggerClient *logger, CFStringRef hostName, UInt32 port) FPLOGGER_NOSTRIP;
 
 // Configure the logger to use a local file for buffering, instead of memory.
 // - If you initially set a buffer file after logging started but while a logger connection
@@ -181,22 +183,22 @@ extern void LoggerSetViewerHost(FPLoggerClient *logger, CFStringRef hostName, UI
 // - If you want to change the buffering file after logging started, you should first
 //   call LoggerStop() the call LoggerSetBufferFile(). Note that all logs stored in the previous
 //   buffer file WON'T be transferred to the new file in this case.
-extern void LoggerSetBufferFile(FPLoggerClient *logger, CFStringRef absolutePath) NSLOGGER_NOSTRIP;
+extern void LoggerSetBufferFile(FPLoggerClient *logger, CFStringRef absolutePath) FPLOGGER_NOSTRIP;
 
 // Activate the logger, try connecting. You can pass NULL to start the default logger,
 // it will return a pointer to it.
-extern FPLoggerClient* LoggerStart(FPLoggerClient *logger) NSLOGGER_NOSTRIP;
+extern FPLoggerClient* LoggerStart(FPLoggerClient *logger) FPLOGGER_NOSTRIP;
 
 //extern void LoggerConnectToHost(CFDataRef address, int port);
 
 // Deactivate and free the logger.
-extern void LoggerStop(FPLoggerClient *logger) NSLOGGER_NOSTRIP;
+extern void LoggerStop(FPLoggerClient *logger) FPLOGGER_NOSTRIP;
 
 // Pause the current thread until all messages from the logger have been transmitted
 // this is useful to use before an assert() aborts your program. If waitForConnection is YES,
 // LoggerFlush() will block even if the client is not currently connected to the desktop
 // viewer. You should be using NO most of the time, but in some cases it can be useful.
-extern void LoggerFlush(FPLoggerClient *logger, BOOL waitForConnection) NSLOGGER_NOSTRIP;
+extern void LoggerFlush(FPLoggerClient *logger, BOOL waitForConnection) FPLOGGER_NOSTRIP;
 
 /* Logging functions. Each function exists in four versions:
  *
@@ -210,48 +212,48 @@ extern void LoggerFlush(FPLoggerClient *logger, BOOL waitForConnection) NSLOGGER
  */
 
 // Log a message, calling format compatible with NSLog
-extern void LogMessageCompat(NSString *format, ...) NSLOGGER_NOSTRIP;
+extern void LogMessageCompat(NSString *format, ...) FPLOGGER_NOSTRIP;
 
 // Log a message without any formatting (just log the given string)
-extern void LogMessageRaw(NSString *message) NSLOGGER_NOSTRIP;
-extern void LogMessageRawF(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *message) NSLOGGER_NOSTRIP;
-extern void LogMessageRawToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *message) NSLOGGER_NOSTRIP;
+extern void LogMessageRaw(NSString *message) FPLOGGER_NOSTRIP;
+extern void LogMessageRawF(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *message) FPLOGGER_NOSTRIP;
+extern void LogMessageRawToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *message) FPLOGGER_NOSTRIP;
 
 // Log a message. domain can be nil if default domain.
-extern void LogMessage(NSString *domain, int level, NSString *format, ...) NS_FORMAT_FUNCTION(3,4) NSLOGGER_NOSTRIP;
-extern void LogMessageF(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, ...) NS_FORMAT_FUNCTION(6,7) NSLOGGER_NOSTRIP;
-extern void LogMessageTo(FPLoggerClient *logger, NSString *domain, int level, NSString *format, ...) NS_FORMAT_FUNCTION(4,5) NSLOGGER_NOSTRIP;
-extern void LogMessageToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, ...) NS_FORMAT_FUNCTION(7,8) NSLOGGER_NOSTRIP;
+extern void LogMessage(NSString *domain, int level, NSString *format, ...) NS_FORMAT_FUNCTION(3,4) FPLOGGER_NOSTRIP;
+extern void LogMessageF(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, ...) NS_FORMAT_FUNCTION(6,7) FPLOGGER_NOSTRIP;
+extern void LogMessageTo(FPLoggerClient *logger, NSString *domain, int level, NSString *format, ...) NS_FORMAT_FUNCTION(4,5) FPLOGGER_NOSTRIP;
+extern void LogMessageToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, ...) NS_FORMAT_FUNCTION(7,8) FPLOGGER_NOSTRIP;
 
 // Log a message. domain can be nil if default domain (versions with va_list format args instead of ...)
-extern void LogMessage_va(NSString *domain, int level, NSString *format, va_list args) NS_FORMAT_FUNCTION(3,0) NSLOGGER_NOSTRIP;
-extern void LogMessageF_va(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, va_list args) NS_FORMAT_FUNCTION(6,0) NSLOGGER_NOSTRIP;
-extern void LogMessageTo_va(FPLoggerClient *logger, NSString *domain, int level, NSString *format, va_list args) NS_FORMAT_FUNCTION(4,0) NSLOGGER_NOSTRIP;
-extern void LogMessageToF_va(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, va_list args) NS_FORMAT_FUNCTION(7,0) NSLOGGER_NOSTRIP;
+extern void LogMessage_va(NSString *domain, int level, NSString *format, va_list args) NS_FORMAT_FUNCTION(3,0) FPLOGGER_NOSTRIP;
+extern void LogMessageF_va(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, va_list args) NS_FORMAT_FUNCTION(6,0) FPLOGGER_NOSTRIP;
+extern void LogMessageTo_va(FPLoggerClient *logger, NSString *domain, int level, NSString *format, va_list args) NS_FORMAT_FUNCTION(4,0) FPLOGGER_NOSTRIP;
+extern void LogMessageToF_va(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, va_list args) NS_FORMAT_FUNCTION(7,0) FPLOGGER_NOSTRIP;
 
 // Send binary data to remote logger
-extern void LogData(NSString *domain, int level, NSData *data) NSLOGGER_NOSTRIP;
-extern void LogDataF(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSData *data) NSLOGGER_NOSTRIP;
-extern void LogDataTo(FPLoggerClient *logger, NSString *domain, int level, NSData *data) NSLOGGER_NOSTRIP;
-extern void LogDataToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSData *data) NSLOGGER_NOSTRIP;
+extern void LogData(NSString *domain, int level, NSData *data) FPLOGGER_NOSTRIP;
+extern void LogDataF(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSData *data) FPLOGGER_NOSTRIP;
+extern void LogDataTo(FPLoggerClient *logger, NSString *domain, int level, NSData *data) FPLOGGER_NOSTRIP;
+extern void LogDataToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSData *data) FPLOGGER_NOSTRIP;
 
 // Send image data to remote logger
-extern void LogImageData(NSString *domain, int level, int width, int height, NSData *data) NSLOGGER_NOSTRIP;
-extern void LogImageDataF(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, int width, int height, NSData *data) NSLOGGER_NOSTRIP;
-extern void LogImageDataTo(FPLoggerClient *logger, NSString *domain, int level, int width, int height, NSData *data) NSLOGGER_NOSTRIP;
-extern void LogImageDataToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, int width, int height, NSData *data) NSLOGGER_NOSTRIP;
+extern void LogImageData(NSString *domain, int level, int width, int height, NSData *data) FPLOGGER_NOSTRIP;
+extern void LogImageDataF(const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, int width, int height, NSData *data) FPLOGGER_NOSTRIP;
+extern void LogImageDataTo(FPLoggerClient *logger, NSString *domain, int level, int width, int height, NSData *data) FPLOGGER_NOSTRIP;
+extern void LogImageDataToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, int width, int height, NSData *data) FPLOGGER_NOSTRIP;
 
 // Mark the start of a block. This allows the remote logger to group blocks together
-extern void LogStartBlock(NSString *format, ...) NS_FORMAT_FUNCTION(1,2) NSLOGGER_NOSTRIP;
-extern void LogStartBlockTo(FPLoggerClient *logger, NSString *format, ...) NS_FORMAT_FUNCTION(2,3) NSLOGGER_NOSTRIP;
+extern void LogStartBlock(NSString *format, ...) NS_FORMAT_FUNCTION(1,2) FPLOGGER_NOSTRIP;
+extern void LogStartBlockTo(FPLoggerClient *logger, NSString *format, ...) NS_FORMAT_FUNCTION(2,3) FPLOGGER_NOSTRIP;
 
 // Mark the end of a block
-extern void LogEndBlock(void) NSLOGGER_NOSTRIP;
-extern void LogEndBlockTo(FPLoggerClient *logger) NSLOGGER_NOSTRIP;
+extern void LogEndBlock(void) FPLOGGER_NOSTRIP;
+extern void LogEndBlockTo(FPLoggerClient *logger) FPLOGGER_NOSTRIP;
 
 // Log a marker (text can be null)
-extern void LogMarker(NSString *text) NSLOGGER_NOSTRIP;
-extern void LogMarkerTo(FPLoggerClient *logger, NSString *text) NSLOGGER_NOSTRIP;
+extern void LogMarker(NSString *text) FPLOGGER_NOSTRIP;
+extern void LogMarkerTo(FPLoggerClient *logger, NSString *text) FPLOGGER_NOSTRIP;
 
 #ifdef __cplusplus
 };

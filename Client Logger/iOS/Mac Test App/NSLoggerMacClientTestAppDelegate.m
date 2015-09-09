@@ -47,9 +47,9 @@
 	tagsArray = [[NSArray arrayWithObjects:@"main",@"audio",@"video",@"network",@"database",nil] retain];
 
 #if TEST_CONSOLE_LOGGING
-	LoggerSetOptions(NULL, kLoggerOption_LogToConsole);
+	LoggerSetOptions(NULL, kFPLoggerOption_LogToConsole);
 #else
-	LoggerSetOptions(NULL, kLoggerOption_BrowseBonjour | kLoggerOption_CaptureSystemConsole | kLoggerOption_BufferLogsUntilConnection);
+	LoggerSetOptions(NULL, kFPLoggerOption_BrowseBonjour | kFPLoggerOption_CaptureSystemConsole | kFPLoggerOption_BufferLogsUntilConnection);
  #if TEST_FILE_BUFFERING
 	LoggerSetBufferFile(NULL, CFSTR("/tmp/NSLoggerTempData_MacOSX.rawnsloggerdata"));
  #endif
