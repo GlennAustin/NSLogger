@@ -29,7 +29,7 @@
  * 
  */
 #import "LoggerJSONMessage.h"
-#import "LoggerCommon.h"
+#import "FPLoggerCommon.h"
 
 @implementation LoggerJSONMessage
 

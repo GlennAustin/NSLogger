@@ -31,7 +31,7 @@
 #import "LoggerDocument.h"
 #import "LoggerWindowController.h"
 #import "LoggerTransport.h"
-#import "LoggerCommon.h"
+#import "FPLoggerCommon.h"
 #import "LoggerConnection.h"
 #import "LoggerNativeMessage.h"
 #import "LoggerAppDelegate.h"
@@ -328,7 +328,7 @@
 			if (subset != NULL)
 			{
 				LoggerMessage *message = [[LoggerNativeMessage alloc] initWithData:(NSData *)subset connection:connection];
-				if (message.type == LOGMSG_TYPE_CLIENTINFO)
+				if (message.type == FPLOGGER_LOGMSG_TYPE_CLIENTINFO)
 					[connection clientInfoReceived:message];
 				else
 					[msgs addObject:message];

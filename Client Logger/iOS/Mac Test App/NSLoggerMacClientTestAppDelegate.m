@@ -29,7 +29,7 @@
  * 
  */
 #import "NSLoggerMacClientTestAppDelegate.h"
-#import "LoggerClient.h"
+#import "FPLoggerClient.h"
 
 #define TEST_BONJOUR_SETUP		0
 #define TEST_CONSOLE_LOGGING	0

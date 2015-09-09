@@ -38,7 +38,7 @@
 #import "LoggerConnection.h"
 #import "LoggerTCPConnection.h"
 #import "LoggerMessage.h"
-#import "LoggerCommon.h"
+#import "FPLoggerCommon.h"
 #import "LoggerNativeMessage.h"
 #import "LoggerAppDelegate.h"
 
@@ -81,7 +81,7 @@
 - (NSString *)bonjourServiceType
 {
 	// returns the Bonjour service type, depends on the exact type of service (encrypted or not)
-	return (NSString *)(secure ? LOGGER_SERVICE_TYPE_SSL : LOGGER_SERVICE_TYPE);
+	return (NSString *)(secure ? FPLOGGER_LOGGER_SERVICE_TYPE_SSL : FPLOGGER_LOGGER_SERVICE_TYPE);
 }
 
 - (NSInteger)tcpPort
@@ -120,7 +120,7 @@
 			// take place, and not open a window if it fails).
 			LoggerMessage *message = [[LoggerNativeMessage alloc] initWithData:(NSData *) subset connection:cnx];
 			CFRelease(subset);
-			if (message.type == LOGMSG_TYPE_CLIENTINFO)
+			if (message.type == FPLOGGER_LOGMSG_TYPE_CLIENTINFO)
 			{
 				message.message = [self clientInfoStringForMessage:message];
 				message.threadID = @"";
@@ -144,16 +144,16 @@
 - (NSString *)clientInfoStringForMessage:(LoggerMessage *)message
 {
 	NSDictionary *parts = message.parts;
-	NSString *clientName = [parts objectForKey:@(PART_KEY_CLIENT_NAME)];
-	NSString *clientVersion = [parts objectForKey:@(PART_KEY_CLIENT_VERSION)];
+	NSString *clientName = [parts objectForKey:@(FPLOGGER_PART_KEY_CLIENT_NAME)];
+	NSString *clientVersion = [parts objectForKey:@(FPLOGGER_PART_KEY_CLIENT_VERSION)];
 	NSString *clientAppInfo = @"";
 	if ([clientName length])
 		clientAppInfo = [NSString stringWithFormat:NSLocalizedString(@"Client connected: %@ %@", @""),
 						 clientName,
 						 clientVersion ? clientVersion : @""];
 
-	NSString *osName = [parts objectForKey:@(PART_KEY_OS_NAME)];
-	NSString *osVersion = [parts objectForKey:@(PART_KEY_OS_VERSION)];
+	NSString *osName = [parts objectForKey:@(FPLOGGER_PART_KEY_OS_NAME)];
+	NSString *osVersion = [parts objectForKey:@(FPLOGGER_PART_KEY_OS_VERSION)];
 	NSString *osInfo = @"";
 	if ([osName length])
 		osInfo = [NSString stringWithFormat:NSLocalizedString(@"%@ (%@ %@)", @""),
@@ -161,12 +161,12 @@
 				  osName,
 				  osVersion ? osVersion : @""];
 
-	NSString *hardware = [parts objectForKey:@(PART_KEY_CLIENT_MODEL)];
+	NSString *hardware = [parts objectForKey:@(FPLOGGER_PART_KEY_CLIENT_MODEL)];
 	NSString *hardwareInfo = @"";
 	if ([hardware length])
 		hardwareInfo = [NSString stringWithFormat:NSLocalizedString(@"\nHardware: %@", @""), hardware];
 
-	NSString *uniqueID = [parts objectForKey:@(PART_KEY_UNIQUEID)];
+	NSString *uniqueID = [parts objectForKey:@(FPLOGGER_PART_KEY_UNIQUEID)];
 	NSString *uniqueIDString = @"";
 	if ([uniqueID length])
 		uniqueIDString = [NSString stringWithFormat:NSLocalizedString(@"\nUDID: %@", @""), uniqueID];

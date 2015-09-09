@@ -30,7 +30,7 @@
  */
 #import "LoggerClientInfoCell.h"
 #import "LoggerMessage.h"
-#import "LoggerCommon.h"
+#import "FPLoggerCommon.h"
 
 @implementation LoggerClientInfoCell
 
@@ -77,7 +77,7 @@
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(NSView *)controlView
 {
 	CGContextRef ctx = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
-	BOOL disconnected = (message.type == LOGMSG_TYPE_DISCONNECT);
+	BOOL disconnected = (message.type == FPLOGGER_LOGMSG_TYPE_DISCONNECT);
 	BOOL highlighted = [self isHighlighted];
 
 	// background and separators colors (thank you, Xcode build window)

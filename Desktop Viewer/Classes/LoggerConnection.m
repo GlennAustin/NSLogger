@@ -32,7 +32,7 @@
 #import <objc/runtime.h>
 #import "LoggerConnection.h"
 #import "LoggerMessage.h"
-#import "LoggerCommon.h"
+#import "FPLoggerCommon.h"
 #import "LoggerAppDelegate.h"
 #import "LoggerStatusWindowController.h"
 
@@ -181,12 +181,12 @@ char sConnectionAssociatedObjectKey = 1;
 			LoggerMessage *message = [msgs objectAtIndex:i];
 			switch (message.type)
 			{
-				case LOGMSG_TYPE_BLOCKSTART:
+				case FPLOGGER_LOGMSG_TYPE_BLOCKSTART:
 					[parentIndexesStack addObject:[NSNumber numberWithInt:range.location+i]];
 					lastParent = range.location + i;
 					break;
 					
-				case LOGMSG_TYPE_BLOCKEND:
+				case FPLOGGER_LOGMSG_TYPE_BLOCKEND:
 					if ([parentIndexesStack count])
 					{
 						[parentIndexesStack removeLastObject];
@@ -229,7 +229,7 @@ char sConnectionAssociatedObjectKey = 1;
 		return;
 
 	// Locate the clientInfo message
-	if (((LoggerMessage *)[messages objectAtIndex:0]).type == LOGMSG_TYPE_CLIENTINFO)
+	if (((LoggerMessage *)[messages objectAtIndex:0]).type == FPLOGGER_LOGMSG_TYPE_CLIENTINFO)
 		[messages removeObjectsInRange:NSMakeRange(1, [messages count]-1)];
 	else
 		[messages removeAllObjects];
@@ -244,7 +244,7 @@ char sConnectionAssociatedObjectKey = 1;
 	dispatch_async(messageProcessingQueue, ^{
 		@synchronized (messages)
 		{
-			if ([messages count] == 0 || ((LoggerMessage *)[messages objectAtIndex:0]).type != LOGMSG_TYPE_CLIENTINFO)
+			if ([messages count] == 0 || ((LoggerMessage *)[messages objectAtIndex:0]).type != FPLOGGER_LOGMSG_TYPE_CLIENTINFO)
 				[messages insertObject:message atIndex:0];
 		}
 	});
@@ -253,22 +253,22 @@ char sConnectionAssociatedObjectKey = 1;
 	// while the UI reads them
 	dispatch_async(dispatch_get_main_queue(), ^{
 		NSDictionary *parts = message.parts;
-		id value = [parts objectForKey:[NSNumber numberWithInteger:PART_KEY_CLIENT_NAME]];
+		id value = [parts objectForKey:[NSNumber numberWithInteger:FPLOGGER_PART_KEY_CLIENT_NAME]];
 		if (value != nil)
 			self.clientName = value;
-		value = [parts objectForKey:[NSNumber numberWithInteger:PART_KEY_CLIENT_VERSION]];
+		value = [parts objectForKey:[NSNumber numberWithInteger:FPLOGGER_PART_KEY_CLIENT_VERSION]];
 		if (value != nil)
 			self.clientVersion = value;
-		value = [parts objectForKey:[NSNumber numberWithInteger:PART_KEY_OS_NAME]];
+		value = [parts objectForKey:[NSNumber numberWithInteger:FPLOGGER_PART_KEY_OS_NAME]];
 		if (value != nil)
 			self.clientOSName = value;
-		value = [parts objectForKey:[NSNumber numberWithInteger:PART_KEY_OS_VERSION]];
+		value = [parts objectForKey:[NSNumber numberWithInteger:FPLOGGER_PART_KEY_OS_VERSION]];
 		if (value != nil)
 			self.clientOSVersion = value;
-		value = [parts objectForKey:[NSNumber numberWithInteger:PART_KEY_CLIENT_MODEL]];
+		value = [parts objectForKey:[NSNumber numberWithInteger:FPLOGGER_PART_KEY_CLIENT_MODEL]];
 		if (value != nil)
 			self.clientDevice = value;
-		value = [parts objectForKey:[NSNumber numberWithInteger:PART_KEY_UNIQUEID]];
+		value = [parts objectForKey:[NSNumber numberWithInteger:FPLOGGER_PART_KEY_UNIQUEID]];
 		if (value != nil)
 			self.clientUDID = value;
 

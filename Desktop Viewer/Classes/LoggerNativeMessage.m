@@ -29,7 +29,7 @@
  * 
  */
 #import "LoggerNativeMessage.h"
-#import "LoggerCommon.h"
+#import "FPLoggerCommon.h"
 
 @implementation LoggerNativeMessage
 
@@ -48,11 +48,11 @@
 			uint8_t partKey = *p++;
 			uint8_t partType = *p++;
 			uint32_t partSize;
-			if (partType == PART_TYPE_INT16)
+			if (partType == FPLOGGER_PART_TYPE_INT16)
 				partSize = 2;
-			else if (partType == PART_TYPE_INT32)
+			else if (partType == FPLOGGER_PART_TYPE_INT32)
 				partSize = 4;
-			else if (partType == PART_TYPE_INT64)
+			else if (partType == FPLOGGER_PART_TYPE_INT64)
 				partSize = 8;
 			else
 			{
@@ -65,23 +65,23 @@
 			uint64_t value64 = 0;
 			if (partSize > 0)
 			{
-				if (partType == PART_TYPE_STRING)
+				if (partType == FPLOGGER_PART_TYPE_STRING)
 				{
 					part = [[NSString alloc] initWithBytes:p length:partSize encoding:NSUTF8StringEncoding];
 				}
-				else if (partType == PART_TYPE_BINARY || partType == PART_TYPE_IMAGE)
+				else if (partType == FPLOGGER_PART_TYPE_BINARY || partType == FPLOGGER_PART_TYPE_IMAGE)
 				{
 					part = [[NSData alloc] initWithBytes:p length:partSize];
 				}
-				else if (partType == PART_TYPE_INT16)
+				else if (partType == FPLOGGER_PART_TYPE_INT16)
 				{
 					value32 = (((uint32_t)p[0]) << 8) | (uint32_t)p[1];
 				}
-				else if (partType == PART_TYPE_INT32)
+				else if (partType == FPLOGGER_PART_TYPE_INT32)
 				{
 					value32 = (((uint32_t)p[0]) << 24) | (((uint32_t)p[1]) << 16) | (((uint32_t)p[2]) << 8) | (uint32_t)p[3];
 				}
-				else if (partType == PART_TYPE_INT64)
+				else if (partType == FPLOGGER_PART_TYPE_INT64)
 				{
 					memcpy(&value64, p, 8);
 					value64 = CFSwapInt64BigToHost(value64);
@@ -90,70 +90,70 @@
 			}
 			switch (partKey)
 			{
-				case PART_KEY_MESSAGE_TYPE:
+				case FPLOGGER_PART_KEY_MESSAGE_TYPE:
 					type = (short)value32;
 					break;
-				case PART_KEY_MESSAGE_SEQ:			
+				case FPLOGGER_PART_KEY_MESSAGE_SEQ:			
 					sequence = value32;
 					break;
-				case PART_KEY_TIMESTAMP_S:			// timestamp with seconds-level resolution
-					timestamp.tv_sec = (partType == PART_TYPE_INT64) ? (__darwin_time_t)value64 : (__darwin_time_t)value32;
+				case FPLOGGER_PART_KEY_TIMESTAMP_S:			// timestamp with seconds-level resolution
+					timestamp.tv_sec = (partType == FPLOGGER_PART_TYPE_INT64) ? (__darwin_time_t)value64 : (__darwin_time_t)value32;
 					break;
-				case PART_KEY_TIMESTAMP_MS:			// millisecond part of the timestamp (optional)
-					timestamp.tv_usec = ((partType == PART_TYPE_INT64) ? (__darwin_suseconds_t)value64 : (__darwin_suseconds_t)value32) * 1000;
+				case FPLOGGER_PART_KEY_TIMESTAMP_MS:			// millisecond part of the timestamp (optional)
+					timestamp.tv_usec = ((partType == FPLOGGER_PART_TYPE_INT64) ? (__darwin_suseconds_t)value64 : (__darwin_suseconds_t)value32) * 1000;
 					break;
-				case PART_KEY_TIMESTAMP_US:			// microsecond part of the timestamp (optional)
-					timestamp.tv_usec = (partType == PART_TYPE_INT64) ? (__darwin_suseconds_t)value64 : (__darwin_suseconds_t)value32;
+				case FPLOGGER_PART_KEY_TIMESTAMP_US:			// microsecond part of the timestamp (optional)
+					timestamp.tv_usec = (partType == FPLOGGER_PART_TYPE_INT64) ? (__darwin_suseconds_t)value64 : (__darwin_suseconds_t)value32;
 					break;
-				case PART_KEY_THREAD_ID:
-					if (partType == PART_TYPE_INT32)
+				case FPLOGGER_PART_KEY_THREAD_ID:
+					if (partType == FPLOGGER_PART_TYPE_INT32)
 						threadID = [[NSString alloc] initWithFormat:@"Thread 0x%x", value32];
-					else if (partType == PART_TYPE_INT64)
+					else if (partType == FPLOGGER_PART_TYPE_INT64)
 						threadID = [[NSString alloc] initWithFormat:@"Thread 0x%qx", value64];
-					else if (partType == PART_TYPE_STRING)
+					else if (partType == FPLOGGER_PART_TYPE_STRING)
 						threadID = [part retain];
 					else
 						threadID = @"";
 					break;
-				case PART_KEY_TAG:
+				case FPLOGGER_PART_KEY_TAG:
 					self.tag = (NSString *)part;
 					break;
-				case PART_KEY_LEVEL:
+				case FPLOGGER_PART_KEY_LEVEL:
 					level = (short)value32;
 					break;
-				case PART_KEY_MESSAGE:
+				case FPLOGGER_PART_KEY_MESSAGE:
 					self.message = part;
-					if (partType == PART_TYPE_STRING)
+					if (partType == FPLOGGER_PART_TYPE_STRING)
 						contentsType = kMessageString;
-					else if (partType == PART_TYPE_BINARY)
+					else if (partType == FPLOGGER_PART_TYPE_BINARY)
 						contentsType = kMessageData;
-					else if (partType == PART_TYPE_IMAGE)
+					else if (partType == FPLOGGER_PART_TYPE_IMAGE)
 						contentsType = kMessageImage;
 					break;
-				case PART_KEY_IMAGE_WIDTH:
-					if (partType == PART_TYPE_INT16 || partType == PART_TYPE_INT32)
+				case FPLOGGER_PART_KEY_IMAGE_WIDTH:
+					if (partType == FPLOGGER_PART_TYPE_INT16 || partType == FPLOGGER_PART_TYPE_INT32)
 						imageSize.width = value32;
-					else if (partType == PART_TYPE_INT64)
+					else if (partType == FPLOGGER_PART_TYPE_INT64)
 						imageSize.width = value64;
 					break;
-				case PART_KEY_IMAGE_HEIGHT:
-					if (partType == PART_TYPE_INT16 || partType == PART_TYPE_INT32)
+				case FPLOGGER_PART_KEY_IMAGE_HEIGHT:
+					if (partType == FPLOGGER_PART_TYPE_INT16 || partType == FPLOGGER_PART_TYPE_INT32)
 						imageSize.height = value32;
-					else if (partType == PART_TYPE_INT64)
+					else if (partType == FPLOGGER_PART_TYPE_INT64)
 						imageSize.height = value64;
 					break;
-				case PART_KEY_FILENAME:
+				case FPLOGGER_PART_KEY_FILENAME:
 					if (part != nil)
 						[self setFilename:part connection:aConnection];
 					break;
-				case PART_KEY_FUNCTIONNAME:
+				case FPLOGGER_PART_KEY_FUNCTIONNAME:
 					if (part!= nil)
 						[self setFunctionName:part connection:aConnection];
 					break;
-				case PART_KEY_LINENUMBER:
-					if (partType == PART_TYPE_INT16 || partType == PART_TYPE_INT32)
+				case FPLOGGER_PART_KEY_LINENUMBER:
+					if (partType == FPLOGGER_PART_TYPE_INT16 || partType == FPLOGGER_PART_TYPE_INT32)
 						lineNumber = value32;
-					else if (partType == PART_TYPE_INT64)
+					else if (partType == FPLOGGER_PART_TYPE_INT64)
 						lineNumber = (int)value64;
 					break;
 				default: {
@@ -161,9 +161,9 @@
 					if (parts == nil)
 						parts = [[NSMutableDictionary alloc] init];
 					NSNumber *partKeyNumber = [[NSNumber alloc] initWithUnsignedInteger:partKey];
-					if (partType == PART_TYPE_INT32)
+					if (partType == FPLOGGER_PART_TYPE_INT32)
 						part = [[NSNumber alloc] initWithInteger:value32];
-					else if (partType == PART_TYPE_INT64)
+					else if (partType == FPLOGGER_PART_TYPE_INT64)
 						part = [[NSNumber alloc] initWithUnsignedLongLong:value64];
 					if (part != nil)
 						[parts setObject:part forKey:partKeyNumber];
@@ -176,7 +176,7 @@
 	}
 #if 0
 	// Debug tool to log the original image (until we have DnD)
-	if (type == LOGMSG_TYPE_LOG && contentsType == kMessageImage)
+	if (type == FPLOGGER_LOGMSG_TYPE_LOG && contentsType == kMessageImage)
 	{
 		// detect the image type to set the proper extension
 		NSString *ext = @"png";

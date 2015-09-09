@@ -30,7 +30,7 @@
  */
 #import <objc/runtime.h>
 #import "LoggerMessage.h"
-#import "LoggerCommon.h"
+#import "FPLoggerCommon.h"
 #import "LoggerConnection.h"
 
 static NSMutableArray *sTags = nil;
@@ -87,7 +87,7 @@ static NSMutableArray *sTags = nil;
 
 	if (contentsType == kMessageString)
 	{
-		if (type == LOGMSG_TYPE_MARK)
+		if (type == FPLOGGER_LOGMSG_TYPE_MARK)
 			return [NSString stringWithFormat:@"%@\n", message];
 
 		/* commmon case */
@@ -317,12 +317,12 @@ static NSMutableArray *sTags = nil;
 #ifdef DEBUG
 -(NSString *)description
 {
-	NSString *typeString = ((type == LOGMSG_TYPE_LOG) ? @"Log" :
-							(type == LOGMSG_TYPE_CLIENTINFO) ? @"ClientInfo" :
-							(type == LOGMSG_TYPE_DISCONNECT) ? @"Disconnect" :
-							(type == LOGMSG_TYPE_BLOCKSTART) ? @"BlockStart" :
-							(type == LOGMSG_TYPE_BLOCKEND) ? @"BlockEnd" :
-							(type == LOGMSG_TYPE_MARK) ? @"Mark" :
+	NSString *typeString = ((type == FPLOGGER_LOGMSG_TYPE_LOG) ? @"Log" :
+							(type == FPLOGGER_LOGMSG_TYPE_CLIENTINFO) ? @"ClientInfo" :
+							(type == FPLOGGER_LOGMSG_TYPE_DISCONNECT) ? @"Disconnect" :
+							(type == FPLOGGER_LOGMSG_TYPE_BLOCKSTART) ? @"BlockStart" :
+							(type == FPLOGGER_LOGMSG_TYPE_BLOCKEND) ? @"BlockEnd" :
+							(type == FPLOGGER_LOGMSG_TYPE_MARK) ? @"Mark" :
 							@"Unknown");
 	NSString *desc;
 	if (contentsType == kMessageData)

@@ -36,7 +36,7 @@
 #import "LoggerMarkerCell.h"
 #import "LoggerMessage.h"
 #import "LoggerAppDelegate.h"
-#import "LoggerCommon.h"
+#import "FPLoggerCommon.h"
 #import "LoggerDocument.h"
 #import "LoggerSplitView.h"
 
@@ -236,16 +236,16 @@ static NSArray *sXcodeFileExtensions = nil;
 				msg.cachedCellSize = NSZeroSize;
 			switch (msg.type)
 			{
-				case LOGMSG_TYPE_LOG:
-				case LOGMSG_TYPE_BLOCKSTART:
-				case LOGMSG_TYPE_BLOCKEND:
+				case FPLOGGER_LOGMSG_TYPE_LOG:
+				case FPLOGGER_LOGMSG_TYPE_BLOCKSTART:
+				case FPLOGGER_LOGMSG_TYPE_BLOCKEND:
 					newHeight = [LoggerMessageCell heightForCellWithMessage:msg threadColumnWidth:threadColumnWidth maxSize:maxCellSize showFunctionNames:showFunctionNames];
 					break;
-				case LOGMSG_TYPE_CLIENTINFO:
-				case LOGMSG_TYPE_DISCONNECT:
+				case FPLOGGER_LOGMSG_TYPE_CLIENTINFO:
+				case FPLOGGER_LOGMSG_TYPE_DISCONNECT:
 					newHeight = [LoggerClientInfoCell heightForCellWithMessage:msg threadColumnWidth:threadColumnWidth maxSize:maxCellSize showFunctionNames:showFunctionNames];
 					break;
-				case LOGMSG_TYPE_MARK:
+				case FPLOGGER_LOGMSG_TYPE_MARK:
 					newHeight = [LoggerMarkerCell heightForCellWithMessage:msg threadColumnWidth:threadColumnWidth maxSize:maxCellSize showFunctionNames:showFunctionNames];
 					break;
 			}
@@ -429,9 +429,9 @@ static NSArray *sXcodeFileExtensions = nil;
 {
 	NSExpression *lhs = [NSExpression expressionForKeyPath:@"type"];
 	NSExpression *rhs = [NSExpression expressionForConstantValue:[NSSet setWithObjects:
-																  [NSNumber numberWithInteger:LOGMSG_TYPE_MARK],
-																  [NSNumber numberWithInteger:LOGMSG_TYPE_CLIENTINFO],
-																  [NSNumber numberWithInteger:LOGMSG_TYPE_DISCONNECT],
+																  [NSNumber numberWithInteger:FPLOGGER_LOGMSG_TYPE_MARK],
+																  [NSNumber numberWithInteger:FPLOGGER_LOGMSG_TYPE_CLIENTINFO],
+																  [NSNumber numberWithInteger:FPLOGGER_LOGMSG_TYPE_DISCONNECT],
 																  nil]];
 	return [NSComparisonPredicate predicateWithLeftExpression:lhs
 											  rightExpression:rhs
@@ -1250,14 +1250,14 @@ didReceiveMessages:(NSArray *)theMessages
 		LoggerMessage *msg = [displayedMessages objectAtIndex:row];
 		switch (msg.type)
 		{
-			case LOGMSG_TYPE_LOG:
-			case LOGMSG_TYPE_BLOCKSTART:
-			case LOGMSG_TYPE_BLOCKEND:
+			case FPLOGGER_LOGMSG_TYPE_LOG:
+			case FPLOGGER_LOGMSG_TYPE_BLOCKSTART:
+			case FPLOGGER_LOGMSG_TYPE_BLOCKEND:
 				return messageCell;
-			case LOGMSG_TYPE_CLIENTINFO:
-			case LOGMSG_TYPE_DISCONNECT:
+			case FPLOGGER_LOGMSG_TYPE_CLIENTINFO:
+			case FPLOGGER_LOGMSG_TYPE_DISCONNECT:
 				return clientInfoCell;
-			case LOGMSG_TYPE_MARK:
+			case FPLOGGER_LOGMSG_TYPE_MARK:
 				return markerCell;
 			default:
 				assert(false);
@@ -1283,7 +1283,7 @@ didReceiveMessages:(NSArray *)theMessages
 		while (prev == nil && idx >= 0)
 		{
 			prev = [displayedMessages objectAtIndex:idx--];
-			if (prev.type == LOGMSG_TYPE_CLIENTINFO || prev.type == LOGMSG_TYPE_MARK)
+			if (prev.type == FPLOGGER_LOGMSG_TYPE_CLIENTINFO || prev.type == FPLOGGER_LOGMSG_TYPE_MARK)
 				prev = nil;
 		} 
 		
@@ -1672,7 +1672,7 @@ didReceiveMessages:(NSArray *)theMessages
 {
 	NSMenuItem *marksSubmenu = [[[[NSApp mainMenu] itemWithTag:TOOLS_MENU_ITEM_TAG] submenu] itemWithTag:TOOLS_MENU_JUMP_TO_MARK_TAG];
 	NSExpression *lhs = [NSExpression expressionForKeyPath:@"type"];
-	NSExpression *rhs = [NSExpression expressionForConstantValue:[NSNumber numberWithInteger:LOGMSG_TYPE_MARK]];
+	NSExpression *rhs = [NSExpression expressionForConstantValue:[NSNumber numberWithInteger:FPLOGGER_LOGMSG_TYPE_MARK]];
 	NSPredicate *predicate = [NSComparisonPredicate predicateWithLeftExpression:lhs
 																rightExpression:rhs
 																	   modifier:NSDirectPredicateModifier
@@ -1743,7 +1743,7 @@ didReceiveMessages:(NSArray *)theMessages
 	LoggerMessage *mark = [[LoggerMessage alloc] init];
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	mark.type = LOGMSG_TYPE_MARK;
+	mark.type = FPLOGGER_LOGMSG_TYPE_MARK;
 	mark.timestamp = tv;
 	mark.message = title;
 	mark.threadID = @"";
@@ -1816,7 +1816,7 @@ didReceiveMessages:(NSArray *)theMessages
 	if (rowIndex >= 0 && rowIndex < (NSInteger)[displayedMessages count])
 	{
 		LoggerMessage *markMessage = [displayedMessages objectAtIndex:(NSUInteger)rowIndex];
-		assert(markMessage.type == LOGMSG_TYPE_MARK);
+		assert(markMessage.type == FPLOGGER_LOGMSG_TYPE_MARK);
 		[displayedMessages removeObjectAtIndex:(NSUInteger)rowIndex];
 		[logTable reloadData];
 		[self rebuildMarksSubmenu];
@@ -1867,7 +1867,7 @@ didReceiveMessages:(NSArray *)theMessages
 		if (rowIndex >= 0 && rowIndex < (NSInteger)[displayedMessages count])
 		{
 			LoggerMessage *markMessage = [displayedMessages objectAtIndex:(NSUInteger)rowIndex];
-			return (markMessage.type == LOGMSG_TYPE_MARK);
+			return (markMessage.type == FPLOGGER_LOGMSG_TYPE_MARK);
 		}
 		return NO;
 	}

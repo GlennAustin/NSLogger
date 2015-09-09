@@ -43,7 +43,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
-#import "LoggerCommon.h"
+#import "FPLoggerCommon.h"
 #import "LoggerTCPTransport.h"
 #import "LoggerStatusWindowController.h"
 #import "LoggerAppDelegate.h"
@@ -559,7 +559,7 @@ static void AcceptSocketCallback(CFSocketRef sock, CFSocketCallBackType type, CF
 					gettimeofday(&t, NULL);
 					LoggerMessage *msg = [[LoggerMessage alloc] init];
 					msg.timestamp = t;
-					msg.type = LOGMSG_TYPE_DISCONNECT;
+					msg.type = FPLOGGER_LOGMSG_TYPE_DISCONNECT;
 					msg.message = NSLocalizedString(@"Client disconnected", @"");
 					[cnx messagesReceived:[NSArray arrayWithObject:msg]];
 					[msg release];

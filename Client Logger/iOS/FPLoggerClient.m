@@ -1,5 +1,5 @@
 /*
- * LoggerClient.m
+ * FPLoggerClient.m
  *
  * version 1.5.1 30-DEC-2014
  *
@@ -38,8 +38,8 @@
 #import <arpa/inet.h>
 #import <stdlib.h>
 
-#import "LoggerClient.h"
-#import "LoggerCommon.h"
+#import "FPLoggerClient.h"
+#import "FPLoggerCommon.h"
 
 #if !TARGET_OS_IPHONE
 	#import <sys/types.h>
@@ -99,7 +99,7 @@
  * --------------------------------------------------------------------------------
  */
 
-/* Logger internal debug flags */
+/* FPLoggerClient internal debug flags */
 // Set to 0 to disable internal debug completely
 // Set to 1 to activate console logs when running the logger itself
 // Set to 2 to see every logging call issued by the app, too
@@ -148,39 +148,39 @@
 
 /* Local prototypes */
 static void LoggerFlushAllOnExit(void);
-static void* LoggerWorkerThread(Logger *logger);
-static void LoggerWriteMoreData(Logger *logger);
-static void LoggerPushMessageToQueue(Logger *logger, CFDataRef message);
+static void* LoggerWorkerThread(FPLoggerClient *logger);
+static void LoggerWriteMoreData(FPLoggerClient *logger);
+static void LoggerPushMessageToQueue(FPLoggerClient *logger, CFDataRef message);
 
 // Bonjour management
-static void LoggerStartBonjourBrowsing(Logger *logger);
-static void LoggerStopBonjourBrowsing(Logger *logger);
-static BOOL LoggerBrowseBonjourForServices(Logger *logger, CFStringRef domainName);
+static void LoggerStartBonjourBrowsing(FPLoggerClient *logger);
+static void LoggerStopBonjourBrowsing(FPLoggerClient *logger);
+static BOOL LoggerBrowseBonjourForServices(FPLoggerClient *logger, CFStringRef domainName);
 static void LoggerServiceBrowserCallBack(CFNetServiceBrowserRef browser, CFOptionFlags flags, CFTypeRef domainOrService, CFStreamError* error, void *info);
 
 // Reachability and reconnect timer
-static void LoggerRemoteSettingsChanged(Logger *logger);
-static void LoggerStartReachabilityChecking(Logger *logger);
-static void LoggerStopReachabilityChecking(Logger *logger);
+static void LoggerRemoteSettingsChanged(FPLoggerClient *logger);
+static void LoggerStartReachabilityChecking(FPLoggerClient *logger);
+static void LoggerStopReachabilityChecking(FPLoggerClient *logger);
 static void LoggerReachabilityCallBack(SCNetworkReachabilityRef target, SCNetworkReachabilityFlags flags, void *info);
-static void LoggerStartReconnectTimer(Logger *logger);
-static void LoggerStopReconnectTimer(Logger *logger);
+static void LoggerStartReconnectTimer(FPLoggerClient *logger);
+static void LoggerStopReconnectTimer(FPLoggerClient *logger);
 static void LoggerTimedReconnectCallback(CFRunLoopTimerRef timer, void *info);
 
 // Connection & stream management
-static void LoggerTryConnect(Logger *logger);
-static void LoggerWriteStreamTerminated(Logger *logger);
+static void LoggerTryConnect(FPLoggerClient *logger);
+static void LoggerWriteStreamTerminated(FPLoggerClient *logger);
 static void LoggerWriteStreamCallback(CFWriteStreamRef ws, CFStreamEventType event, void* info);
 
 // File buffering
-static void LoggerCreateBufferWriteStream(Logger *logger);
-static void LoggerCreateBufferReadStream(Logger *logger);
-static void LoggerEmptyBufferFile(Logger *logger);
-static void LoggerFileBufferingOptionsChanged(Logger *logger);
-static void LoggerFlushQueueToBufferStream(Logger *logger, BOOL firstEntryIsClientInfo);
+static void LoggerCreateBufferWriteStream(FPLoggerClient *logger);
+static void LoggerCreateBufferReadStream(FPLoggerClient *logger);
+static void LoggerEmptyBufferFile(FPLoggerClient *logger);
+static void LoggerFileBufferingOptionsChanged(FPLoggerClient *logger);
+static void LoggerFlushQueueToBufferStream(FPLoggerClient *logger, BOOL firstEntryIsClientInfo);
 
 // Encoding functions
-static void	LoggerPushClientInfoToFrontOfQueue(Logger *logger);
+static void	LoggerPushClientInfoToFrontOfQueue(FPLoggerClient *logger);
 static void LoggerMessageAddTimestampAndThreadID(CFMutableDataRef encoder);
 
 static CFMutableDataRef LoggerMessageCreate(int32_t seq);
@@ -194,15 +194,15 @@ static uint32_t LoggerMessageGetSeq(CFDataRef message);
 
 /* Static objects */
 static CFMutableArrayRef sLoggersList;
-static Logger* volatile sDefaultLogger = NULL;
+static FPLoggerClient* volatile sDefaultLogger = NULL;
 static Boolean sAtexitFunctionSet = FALSE;
 static pthread_mutex_t sLoggersListMutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t sDefaultLoggerMutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Console logging
-static void LoggerStartGrabbingConsole(Logger *logger);
-static void LoggerStopGrabbingConsole(Logger *logger);
-static Logger ** consoleGrabbersList = NULL;
+static void LoggerStartGrabbingConsole(FPLoggerClient *logger);
+static void LoggerStopGrabbingConsole(FPLoggerClient *logger);
+static FPLoggerClient ** consoleGrabbersList = NULL;
 static unsigned consoleGrabbersListLength;
 static unsigned numActiveConsoleGrabbers = 0;
 static pthread_mutex_t consoleGrabbersMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -215,16 +215,16 @@ static int sSTDOUThadSIGPIPE, sSTDERRhadSIGPIPE;
 #pragma mark -
 #pragma mark Default logger
 // -----------------------------------------------------------------------------
-void LoggerSetDefaultLogger(Logger *defaultLogger)
+void LoggerSetDefaultLogger(FPLoggerClient *defaultLogger)
 {
 	pthread_mutex_lock(&sDefaultLoggerMutex);
 	sDefaultLogger = defaultLogger;
 	pthread_mutex_unlock(&sDefaultLoggerMutex);
 }
 
-Logger *LoggerGetDefaultLogger(void)
+FPLoggerClient *LoggerGetDefaultLogger(void)
 {
-	Logger *l = sDefaultLogger;
+	FPLoggerClient *l = sDefaultLogger;
 	if (l == NULL)
 	{
 		pthread_mutex_lock(&sDefaultLoggerMutex);
@@ -236,7 +236,7 @@ Logger *LoggerGetDefaultLogger(void)
 	return l;
 }
 
-Logger *LoggerCheckDefaultLogger(void)
+FPLoggerClient *LoggerCheckDefaultLogger(void)
 {
 	return sDefaultLogger;
 }
@@ -245,12 +245,12 @@ Logger *LoggerCheckDefaultLogger(void)
 #pragma mark -
 #pragma mark Initialization and setup
 // -----------------------------------------------------------------------------
-Logger *LoggerInit(void)
+FPLoggerClient *LoggerInit(void)
 {
 	LOGGERDBG(CFSTR("LoggerInit defaultLogger=%p"), sDefaultLogger);
 	
-	Logger *logger = (Logger *)malloc(sizeof(Logger));
-	bzero(logger, sizeof(Logger));
+	FPLoggerClient *logger = (FPLoggerClient *)malloc(sizeof(FPLoggerClient));
+	bzero(logger, sizeof(FPLoggerClient));
 
 	logger->logQueue = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
 	pthread_mutex_init(&logger->logQueueMutex, NULL);
@@ -297,7 +297,7 @@ Logger *LoggerInit(void)
 	return logger;
 }
 
-void LoggerSetOptions(Logger *logger, uint32_t options)
+void LoggerSetOptions(FPLoggerClient *logger, uint32_t options)
 {
 	LOGGERDBG(CFSTR("LoggerSetOptions options=0x%08lx"), options);
 
@@ -313,7 +313,7 @@ void LoggerSetOptions(Logger *logger, uint32_t options)
 		logger->options = options;
 }
 
-void LoggerSetupBonjour(Logger *logger, CFStringRef bonjourServiceType, CFStringRef bonjourServiceName)
+void LoggerSetupBonjour(FPLoggerClient *logger, CFStringRef bonjourServiceType, CFStringRef bonjourServiceName)
 {
 	LOGGERDBG(CFSTR("LoggerSetupBonjour serviceType=%@ serviceName=%@"), bonjourServiceType, bonjourServiceName);
 
@@ -334,7 +334,7 @@ void LoggerSetupBonjour(Logger *logger, CFStringRef bonjourServiceType, CFString
 	}
 }
 
-void LoggerSetViewerHost(Logger *logger, CFStringRef hostName, UInt32 port)
+void LoggerSetViewerHost(FPLoggerClient *logger, CFStringRef hostName, UInt32 port)
 {
 	if (logger == NULL)
 		logger = LoggerGetDefaultLogger();
@@ -362,7 +362,7 @@ void LoggerSetViewerHost(Logger *logger, CFStringRef hostName, UInt32 port)
 		CFRelease(previousHost);
 }
 
-void LoggerSetBufferFile(Logger *logger, CFStringRef absolutePath)
+void LoggerSetBufferFile(FPLoggerClient *logger, CFStringRef absolutePath)
 {
 	if (logger == NULL)
 	{
@@ -388,7 +388,7 @@ void LoggerSetBufferFile(Logger *logger, CFStringRef absolutePath)
 	}
 }
 
-Logger *LoggerStart(Logger *logger)
+FPLoggerClient *LoggerStart(FPLoggerClient *logger)
 {
 	// will do nothing if logger is already started
 	if (logger == NULL)
@@ -417,7 +417,7 @@ Logger *LoggerStart(Logger *logger)
 	return logger;
 }
 
-void LoggerStop(Logger *logger)
+void LoggerStop(FPLoggerClient *logger)
 {
 	LOGGERDBG(CFSTR("LoggerStop"));
 
@@ -458,7 +458,7 @@ void LoggerStop(Logger *logger)
 
 		// to make sure potential errors are caught, set the whole structure
 		// to a value that will make code crash if it tries using pointers to it.
-		memset(logger, 0x55, sizeof(Logger));
+		memset(logger, 0x55, sizeof(FPLoggerClient));
 
 		free(logger);
 	}
@@ -473,11 +473,11 @@ static void LoggerFlushAllOnExit()
 	pthread_mutex_lock(&sLoggersListMutex);
 	CFIndex numLoggers = CFArrayGetCount(sLoggersList);
 	for (CFIndex i=0; i < numLoggers; i++)
-		LoggerFlush((Logger *) CFArrayGetValueAtIndex(sLoggersList, i), NO);
+		LoggerFlush((FPLoggerClient *) CFArrayGetValueAtIndex(sLoggersList, i), NO);
 	pthread_mutex_unlock(&sLoggersListMutex);
 }
 
-void LoggerFlush(Logger *logger, BOOL waitForConnection)
+void LoggerFlush(FPLoggerClient *logger, BOOL waitForConnection)
 {
 	// Special case: if nothing has ever been logged, don't bother
 	if (logger == NULL && sDefaultLogger == NULL)
@@ -499,7 +499,7 @@ void LoggerFlush(Logger *logger, BOOL waitForConnection)
 static void LoggerDbg(CFStringRef format, ...)
 {
 	// Internal debugging function
-	// (what do you think, that we use the Logger to debug itself ??)
+	// (what do you think, that we use the FPLoggerClient to debug itself ??)
 	if (format != NULL)
 	{
 		@autoreleasepool
@@ -522,7 +522,7 @@ static void LoggerDbg(CFStringRef format, ...)
 #pragma mark -
 #pragma mark Main processing
 // -----------------------------------------------------------------------------
-static BOOL LoggerPrepareRunloopSource(Logger *logger, CFRunLoopSourceRef *outRef, void *callback)
+static BOOL LoggerPrepareRunloopSource(FPLoggerClient *logger, CFRunLoopSourceRef *outRef, void *callback)
 {
 	// first call will also create the thread's runloop
 	CFRunLoopSourceContext context;
@@ -550,7 +550,7 @@ static void LoggerDisposeRunloopSource(CFRunLoopSourceRef *sourceRef)
 	}
 }
 
-static void *LoggerWorkerThread(Logger *logger)
+static void *LoggerWorkerThread(FPLoggerClient *logger)
 {
 	LOGGERDBG(CFSTR("Start LoggerWorkerThread"));
 
@@ -707,7 +707,7 @@ static void LoggerLogToConsole(CFDataRef data)
 	}
 	struct timeval timestamp;
 	bzero(&timestamp, sizeof(timestamp));
-	int type = LOGMSG_TYPE_LOG, contentsType = PART_TYPE_STRING;
+	int type = FPLOGGER_LOGMSG_TYPE_LOG, contentsType = FPLOGGER_PART_TYPE_STRING;
 	int imgWidth=0, imgHeight=0;
 	CFStringRef message = NULL;
 	CFStringRef thread = NULL;
@@ -723,11 +723,11 @@ static void LoggerLogToConsole(CFDataRef data)
 		uint8_t partKey = *p++;
 		uint8_t partType = *p++;
 		uint32_t partSize;
-		if (partType == PART_TYPE_INT16)
+		if (partType == FPLOGGER_PART_TYPE_INT16)
 			partSize = 2;
-		else if (partType == PART_TYPE_INT32)
+		else if (partType == FPLOGGER_PART_TYPE_INT32)
 			partSize = 4;
-		else if (partType == PART_TYPE_INT64)
+		else if (partType == FPLOGGER_PART_TYPE_INT64)
 			partSize = 8;
 		else
 		{
@@ -740,7 +740,7 @@ static void LoggerLogToConsole(CFDataRef data)
 		uint64_t value64 = 0;
 		if (partSize > 0)
 		{
-			if (partType == PART_TYPE_STRING)
+			if (partType == FPLOGGER_PART_TYPE_STRING)
 			{
 				// trim whitespace and newline at both ends of the string
 				uint8_t *q = p;
@@ -752,24 +752,24 @@ static void LoggerLogToConsole(CFDataRef data)
 					r--, l--;
 				part = CFStringCreateWithBytesNoCopy(NULL, q, (CFIndex)l, kCFStringEncodingUTF8, false, kCFAllocatorNull);
 			}
-			else if (partType == PART_TYPE_BINARY)
+			else if (partType == FPLOGGER_PART_TYPE_BINARY)
 			{
 				part = CFDataCreateWithBytesNoCopy(NULL, p, (CFIndex)partSize, kCFAllocatorNull);
 			}
-			else if (partType == PART_TYPE_IMAGE)
+			else if (partType == FPLOGGER_PART_TYPE_IMAGE)
 			{
 				// ignore image data, we can't log it to console
 			}
-			else if (partType == PART_TYPE_INT16)
+			else if (partType == FPLOGGER_PART_TYPE_INT16)
 			{
 				value32 = ((uint32_t)p[0]) << 8 | (uint32_t)p[1];
 			}
-			else if (partType == PART_TYPE_INT32)
+			else if (partType == FPLOGGER_PART_TYPE_INT32)
 			{
 				memcpy(&value32, p, 4);
 				value32 = ntohl(value32);
 			}
-			else if (partType == PART_TYPE_INT64)
+			else if (partType == FPLOGGER_PART_TYPE_INT64)
 			{
 				memcpy(&value64, p, 8);
 				value64 = CFSwapInt64BigToHost(value64);
@@ -778,44 +778,44 @@ static void LoggerLogToConsole(CFDataRef data)
 		}
 		switch (partKey)
 		{
-			case PART_KEY_MESSAGE_TYPE:
+			case FPLOGGER_PART_KEY_MESSAGE_TYPE:
 				type = (int)value32;
 				break;
-			case PART_KEY_TIMESTAMP_S:			// timestamp with seconds-level resolution
-				timestamp.tv_sec = (partType == PART_TYPE_INT64) ? (__darwin_time_t)value64 : (__darwin_time_t)value32;
+			case FPLOGGER_PART_KEY_TIMESTAMP_S:			// timestamp with seconds-level resolution
+				timestamp.tv_sec = (partType == FPLOGGER_PART_TYPE_INT64) ? (__darwin_time_t)value64 : (__darwin_time_t)value32;
 				break;
-			case PART_KEY_TIMESTAMP_MS:			// millisecond part of the timestamp (optional)
-				timestamp.tv_usec = ((partType == PART_TYPE_INT64) ? (__darwin_suseconds_t)value64 : (__darwin_suseconds_t)value32) * 1000;
+			case FPLOGGER_PART_KEY_TIMESTAMP_MS:			// millisecond part of the timestamp (optional)
+				timestamp.tv_usec = ((partType == FPLOGGER_PART_TYPE_INT64) ? (__darwin_suseconds_t)value64 : (__darwin_suseconds_t)value32) * 1000;
 				break;
-			case PART_KEY_TIMESTAMP_US:			// microsecond part of the timestamp (optional)
-				timestamp.tv_usec = (partType == PART_TYPE_INT64) ? (__darwin_suseconds_t)value64 : (__darwin_suseconds_t)value32;
+			case FPLOGGER_PART_KEY_TIMESTAMP_US:			// microsecond part of the timestamp (optional)
+				timestamp.tv_usec = (partType == FPLOGGER_PART_TYPE_INT64) ? (__darwin_suseconds_t)value64 : (__darwin_suseconds_t)value32;
 				break;
-			case PART_KEY_THREAD_ID:
+			case FPLOGGER_PART_KEY_THREAD_ID:
 				if (thread == NULL)				// useless test, we know what we're doing but clang analyzer doesn't...
 				{
-					if (partType == PART_TYPE_INT32)
+					if (partType == FPLOGGER_PART_TYPE_INT32)
 						thread = CFStringCreateWithFormat(NULL, NULL, CFSTR("thread 0x%08x"), value32);
-					else if (partType == PART_TYPE_INT64)
+					else if (partType == FPLOGGER_PART_TYPE_INT64)
 						thread = CFStringCreateWithFormat(NULL, NULL, CFSTR("thread 0x%qx"), value64);
-					else if (partType == PART_TYPE_STRING && part != NULL)
+					else if (partType == FPLOGGER_PART_TYPE_STRING && part != NULL)
 						thread = CFRetain(part);
 				}
 				break;
-			case PART_KEY_MESSAGE:
+			case FPLOGGER_PART_KEY_MESSAGE:
 				if (part != NULL)
 				{
-					if (partType == PART_TYPE_STRING)
+					if (partType == FPLOGGER_PART_TYPE_STRING)
 						message = CFRetain(part);
-					else if (partType == PART_TYPE_BINARY)
+					else if (partType == FPLOGGER_PART_TYPE_BINARY)
 						message = LoggerCreateStringRepresentationFromBinaryData(part);
 				}
 				contentsType = partType;
 				break;
-			case PART_KEY_IMAGE_WIDTH:
-				imgWidth = (partType == PART_TYPE_INT32 ? (int)value32 : (int)value64);
+			case FPLOGGER_PART_KEY_IMAGE_WIDTH:
+				imgWidth = (partType == FPLOGGER_PART_TYPE_INT32 ? (int)value32 : (int)value64);
 				break;
-			case PART_KEY_IMAGE_HEIGHT:
-				imgHeight = (partType == PART_TYPE_INT32 ? (int)value32 : (int)value64);
+			case FPLOGGER_PART_KEY_IMAGE_HEIGHT:
+				imgHeight = (partType == FPLOGGER_PART_TYPE_INT32 ? (int)value32 : (int)value64);
 				break;
 			default:
 				break;
@@ -841,7 +841,7 @@ static void LoggerLogToConsole(CFDataRef data)
 	CFStringAppend(s, ts);
 	CFRelease(ts);
 
-	if (contentsType == PART_TYPE_IMAGE)
+	if (contentsType == FPLOGGER_PART_TYPE_IMAGE)
 		message = CFStringCreateWithFormat(NULL, NULL, CFSTR("<image width=%d height=%d>"), imgWidth, imgHeight);
 
 	buf[0] = 0;
@@ -861,13 +861,13 @@ static void LoggerLogToConsole(CFDataRef data)
 	if (message != NULL)
 		CFRelease(message);
 
-	if (type == LOGMSG_TYPE_LOG || type == LOGMSG_TYPE_MARK)
+	if (type == FPLOGGER_LOGMSG_TYPE_LOG || type == FPLOGGER_LOGMSG_TYPE_MARK)
 		CFShow(s);
 
 	CFRelease(s);
 }
 
-static void LoggerWriteMoreData(Logger *logger)
+static void LoggerWriteMoreData(FPLoggerClient *logger)
 {
 	uint32_t logToConsole = (logger->options & kLoggerOption_LogToConsole);
 	
@@ -1181,7 +1181,7 @@ static void LoggerStopConsoleRedirection()
 	pthread_join(consoleGrabThread, NULL);
 }
 
-static void LoggerStartGrabbingConsole(Logger *logger)
+static void LoggerStartGrabbingConsole(FPLoggerClient *logger)
 {
 	if (!(logger->options & kLoggerOption_CaptureSystemConsole))
 		return;
@@ -1201,7 +1201,7 @@ static void LoggerStartGrabbingConsole(Logger *logger)
 	}
 	if (!added)
 	{
-		consoleGrabbersList = realloc(consoleGrabbersList, ++consoleGrabbersListLength * sizeof(Logger *));
+		consoleGrabbersList = realloc(consoleGrabbersList, ++consoleGrabbersListLength * sizeof(FPLoggerClient *));
 		consoleGrabbersList[numActiveConsoleGrabbers++] = logger;
 	}
 
@@ -1210,7 +1210,7 @@ static void LoggerStartGrabbingConsole(Logger *logger)
 	pthread_mutex_unlock( &consoleGrabbersMutex );
 }
 
-static void LoggerStopGrabbingConsole(Logger *logger)
+static void LoggerStopGrabbingConsole(FPLoggerClient *logger)
 {
 	if (numActiveConsoleGrabbers == 0)
 		return;
@@ -1240,7 +1240,7 @@ static void LoggerStopGrabbingConsole(Logger *logger)
 #pragma mark -
 #pragma mark File buffering functions
 // -----------------------------------------------------------------------------
-static void LoggerCreateBufferWriteStream(Logger *logger)
+static void LoggerCreateBufferWriteStream(FPLoggerClient *logger)
 {
 	LOGGERDBG(CFSTR("LoggerCreateBufferWriteStream to file %@"), logger->bufferFile);
 	CFURLRef fileURL = CFURLCreateWithFileSystemPath(NULL, logger->bufferFile, kCFURLPOSIXPathStyle, false);
@@ -1275,7 +1275,7 @@ static void LoggerCreateBufferWriteStream(Logger *logger)
 	}
 }
 
-static void LoggerCreateBufferReadStream(Logger *logger)
+static void LoggerCreateBufferReadStream(FPLoggerClient *logger)
 {
 	LOGGERDBG(CFSTR("LoggerCreateBufferReadStream from file %@"), logger->bufferFile);
 	CFURLRef fileURL = CFURLCreateWithFileSystemPath(NULL, logger->bufferFile, kCFURLPOSIXPathStyle, false);
@@ -1295,7 +1295,7 @@ static void LoggerCreateBufferReadStream(Logger *logger)
 	}
 }
 
-static void LoggerEmptyBufferFile(Logger *logger)
+static void LoggerEmptyBufferFile(FPLoggerClient *logger)
 {
 	// completely remove the buffer file from storage
 	LOGGERDBG(CFSTR("LoggerEmptyBufferFile %@"), logger->bufferFile);
@@ -1315,7 +1315,7 @@ static void LoggerEmptyBufferFile(Logger *logger)
 	}
 }
 
-static void LoggerFileBufferingOptionsChanged(Logger *logger)
+static void LoggerFileBufferingOptionsChanged(FPLoggerClient *logger)
 {
 	// File buffering options changed (callback called on logger thread):
 	// - close the current buffer file stream, if any
@@ -1331,7 +1331,7 @@ static void LoggerFileBufferingOptionsChanged(Logger *logger)
 		LoggerCreateBufferWriteStream(logger);
 }
 
-static void LoggerFlushQueueToBufferStream(Logger *logger, BOOL firstEntryIsClientInfo)
+static void LoggerFlushQueueToBufferStream(FPLoggerClient *logger, BOOL firstEntryIsClientInfo)
 {
 	LOGGERDBG(CFSTR("LoggerFlushQueueToBufferStream"));
 	pthread_mutex_lock(&logger->logQueueMutex);
@@ -1379,7 +1379,7 @@ static void LoggerFlushQueueToBufferStream(Logger *logger, BOOL firstEntryIsClie
 #pragma mark -
 #pragma mark Bonjour browsing
 // -----------------------------------------------------------------------------
-static void LoggerStartBonjourBrowsing(Logger *logger)
+static void LoggerStartBonjourBrowsing(FPLoggerClient *logger)
 {
 	if (!logger->targetReachable ||
 		logger->bonjourDomainBrowser != NULL ||
@@ -1390,16 +1390,16 @@ static void LoggerStartBonjourBrowsing(Logger *logger)
 	
 	if (logger->options & kLoggerOption_BrowseOnlyLocalDomain)
 	{
-		LOGGERDBG(CFSTR("Logger configured to search only the local domain, searching for services on: local."));
+		LOGGERDBG(CFSTR("FPLoggerClient configured to search only the local domain, searching for services on: local."));
 		if (!LoggerBrowseBonjourForServices(logger, CFSTR("local.")) && logger->host == NULL)
 		{
-			LOGGERDBG(CFSTR("*** Logger: could not browse for services in domain local., no remote host configured: reverting to console logging. ***"));
+			LOGGERDBG(CFSTR("*** FPLoggerClient: could not browse for services in domain local., no remote host configured: reverting to console logging. ***"));
 			logger->options |= kLoggerOption_LogToConsole;
 		}
 	}
 	else
 	{
-		LOGGERDBG(CFSTR("Logger configured to search all domains, browsing for domains first"));
+		LOGGERDBG(CFSTR("FPLoggerClient configured to search all domains, browsing for domains first"));
 		CFNetServiceClientContext context = {0, (void *)logger, NULL, NULL, NULL};
 		CFRunLoopRef runLoop = CFRunLoopGetCurrent();
 		logger->bonjourDomainBrowser = CFNetServiceBrowserCreate(NULL, &LoggerServiceBrowserCallBack, &context);
@@ -1407,7 +1407,7 @@ static void LoggerStartBonjourBrowsing(Logger *logger)
 		if (!CFNetServiceBrowserSearchForDomains(logger->bonjourDomainBrowser, false, NULL))
 		{
 			// An error occurred, revert to console logging if there is no remote host
-			LOGGERDBG(CFSTR("*** Logger: could not browse for domains, reverting to console logging. ***"));
+			LOGGERDBG(CFSTR("*** FPLoggerClient: could not browse for domains, reverting to console logging. ***"));
 			CFNetServiceBrowserUnscheduleFromRunLoop(logger->bonjourDomainBrowser, runLoop, kCFRunLoopCommonModes);
 			CFRelease(logger->bonjourDomainBrowser);
 			logger->bonjourDomainBrowser = NULL;
@@ -1417,7 +1417,7 @@ static void LoggerStartBonjourBrowsing(Logger *logger)
 	}
 }
 
-static void LoggerStopBonjourBrowsing(Logger *logger)
+static void LoggerStopBonjourBrowsing(FPLoggerClient *logger)
 {
 	LOGGERDBG(CFSTR("LoggerStopBonjourBrowsing"));
 	
@@ -1446,7 +1446,7 @@ static void LoggerStopBonjourBrowsing(Logger *logger)
 	CFArrayRemoveAllValues(logger->bonjourServices);
 }
 
-static BOOL LoggerBrowseBonjourForServices(Logger *logger, CFStringRef domainName)
+static BOOL LoggerBrowseBonjourForServices(FPLoggerClient *logger, CFStringRef domainName)
 {
 	BOOL result = NO;
 	CFNetServiceClientContext context = {0, (void *)logger, NULL, NULL, NULL};
@@ -1462,19 +1462,19 @@ static BOOL LoggerBrowseBonjourForServices(Logger *logger, CFStringRef domainNam
 	if (serviceType == NULL)
 	{
 		if (logger->options & kLoggerOption_UseSSL)
-			serviceType = LOGGER_SERVICE_TYPE_SSL;
+			serviceType = FPLOGGER_LOGGER_SERVICE_TYPE_SSL;
 		else
-			serviceType = LOGGER_SERVICE_TYPE;
+			serviceType = FPLOGGER_LOGGER_SERVICE_TYPE;
 	}
 	if (!CFNetServiceBrowserSearchForServices(browser, domainName, serviceType, &error))
 	{
-		LOGGERDBG(CFSTR("Logger can't start search on domain: %@ (error %d)"), domainName, error.error);
+		LOGGERDBG(CFSTR("FPLoggerClient can't start search on domain: %@ (error %d)"), domainName, error.error);
 		CFNetServiceBrowserUnscheduleFromRunLoop(browser, runLoop, kCFRunLoopCommonModes);
 		CFNetServiceBrowserInvalidate(browser);
 	}
 	else
 	{
-		LOGGERDBG(CFSTR("Logger started search for services of type %@ in domain %@"), serviceType, domainName);
+		LOGGERDBG(CFSTR("FPLoggerClient started search for services of type %@ in domain %@"), serviceType, domainName);
 		CFArrayAppendValue(logger->bonjourServiceBrowsers, browser);
 		result = YES;
 	}
@@ -1492,7 +1492,7 @@ static void LoggerServiceBrowserCallBack (CFNetServiceBrowserRef browser,
 #pragma unused (error)
 	LOGGERDBG(CFSTR("LoggerServiceBrowserCallback browser=%@ flags=0x%04x domainOrService=%@ error=%d"), browser, flags, domainOrService, error==NULL ? 0 : error->error);
 	
-	Logger *logger = (Logger *)info;
+	FPLoggerClient *logger = (FPLoggerClient *)info;
 	assert(logger != NULL);
 	
 	if (flags & kCFNetServiceFlagRemove)
@@ -1525,11 +1525,11 @@ static void LoggerServiceBrowserCallBack (CFNetServiceBrowserRef browser,
 		else
 		{
 			// a service has been found
-			LOGGERDBG(CFSTR("Logger found service: %@"), domainOrService);
+			LOGGERDBG(CFSTR("FPLoggerClient found service: %@"), domainOrService);
 			CFNetServiceRef service = (CFNetServiceRef)domainOrService;
 			if (service != NULL)
 			{
-				// if the user has specified that Logger shall only connect to the specified
+				// if the user has specified that FPLoggerClient shall only connect to the specified
 				// Bonjour service name, check it now. This makes things easier in a teamwork
 				// environment where multiple instances of NSLogger viewer may run on the
 				// same network
@@ -1580,7 +1580,7 @@ static void LoggerServiceBrowserCallBack (CFNetServiceBrowserRef browser,
 #pragma mark -
 #pragma mark Reachability & Connectivity Management
 // -----------------------------------------------------------------------------
-static void LoggerRemoteSettingsChanged(Logger *logger)
+static void LoggerRemoteSettingsChanged(FPLoggerClient *logger)
 {
 	// this is a callback for a runloop source, called on the logger thread
 	
@@ -1610,7 +1610,7 @@ static void LoggerRemoteSettingsChanged(Logger *logger)
 	}
 }
 
-static void LoggerStartReachabilityChecking(Logger *logger)
+static void LoggerStartReachabilityChecking(FPLoggerClient *logger)
 {
 	if (logger->reachability == NULL)
 	{
@@ -1649,7 +1649,7 @@ static void LoggerStartReachabilityChecking(Logger *logger)
 	}
 }
 
-static void LoggerStopReachabilityChecking(Logger *logger)
+static void LoggerStopReachabilityChecking(FPLoggerClient *logger)
 {
 	if (logger->reachability != NULL)
 	{
@@ -1665,7 +1665,7 @@ static void LoggerStopReachabilityChecking(Logger *logger)
 static void LoggerReachabilityCallBack(SCNetworkReachabilityRef target, SCNetworkReachabilityFlags flags, void *info)
 {
 #pragma unused (target)
-	Logger *logger = (Logger *)info;
+	FPLoggerClient *logger = (FPLoggerClient *)info;
 
 	LOGGERDBG(CFSTR("LoggerReachabilityCallBack called with flags=0x%08lx"), flags);
 
@@ -1699,7 +1699,7 @@ static void LoggerReachabilityCallBack(SCNetworkReachabilityRef target, SCNetwor
 	}
 }
 
-static void LoggerStartReconnectTimer(Logger *logger)
+static void LoggerStartReconnectTimer(FPLoggerClient *logger)
 {
 	// start a timer that will try to reconnect every 5 seconds
 	if (logger->reconnectTimer == NULL && (logger->host != NULL || (logger->options & kLoggerOption_BrowseBonjour)))
@@ -1727,7 +1727,7 @@ static void LoggerStartReconnectTimer(Logger *logger)
 	}
 }
 
-static void LoggerStopReconnectTimer(Logger *logger)
+static void LoggerStopReconnectTimer(FPLoggerClient *logger)
 {
 	if (logger->reconnectTimer != NULL)
 	{
@@ -1742,7 +1742,7 @@ static void LoggerStopReconnectTimer(Logger *logger)
 static void LoggerTimedReconnectCallback(CFRunLoopTimerRef timer, void *info)
 {
 #pragma unused (timer)
-	Logger *logger = (Logger *)info;
+	FPLoggerClient *logger = (FPLoggerClient *)info;
 	assert(logger != NULL);
 	LOGGERDBG(CFSTR("LoggerTimedReconnectCallback"));
 	if (logger->logStream == NULL)
@@ -1761,7 +1761,7 @@ static void LoggerTimedReconnectCallback(CFRunLoopTimerRef timer, void *info)
 #pragma mark -
 #pragma mark Stream management
 // -----------------------------------------------------------------------------
-static BOOL LoggerConfigureAndOpenStream(Logger *logger)
+static BOOL LoggerConfigureAndOpenStream(FPLoggerClient *logger)
 {
 	// configure and open stream
 	LOGGERDBG(CFSTR("LoggerConfigureAndOpenStream configuring and opening log stream"));
@@ -1837,7 +1837,7 @@ static BOOL LoggerConfigureAndOpenStream(Logger *logger)
 	return NO;
 }
 
-static void LoggerTryConnect(Logger *logger)
+static void LoggerTryConnect(FPLoggerClient *logger)
 {
 	// Core function that attempts connection to found Bonjour services and configured Host
 	LOGGERDBG(CFSTR("LoggerTryConnect, %d services registered, current stream=%@"), CFArrayGetCount(logger->bonjourServices), logger->logStream);
@@ -1911,13 +1911,13 @@ static void LoggerTryConnect(Logger *logger)
 	}
 }
 
-static void LoggerWriteStreamTerminated(Logger *logger)
+static void LoggerWriteStreamTerminated(FPLoggerClient *logger)
 {
 	LOGGERDBG(CFSTR("LoggerWriteStreamTerminated called"));
 
 	if (logger->connected)
 	{
-		LOGGERDBG(CFSTR("-> Logger DISCONNECTED"));
+		LOGGERDBG(CFSTR("-> FPLoggerClient DISCONNECTED"));
 		logger->connected = NO;
 	}
 
@@ -1959,7 +1959,7 @@ static void LoggerWriteStreamTerminated(Logger *logger)
 
 static void LoggerWriteStreamCallback(CFWriteStreamRef ws, CFStreamEventType event, void* info)
 {
-	Logger *logger = (Logger *)info;
+	FPLoggerClient *logger = (FPLoggerClient *)info;
 	assert(ws == logger->logStream);
 	switch (event)
 	{
@@ -1967,7 +1967,7 @@ static void LoggerWriteStreamCallback(CFWriteStreamRef ws, CFStreamEventType eve
 			// A stream open was complete. Cancel all bonjour browsing,
 			// service resolution and connection attempts, and try to
 			// write existing buffer contents
-			LOGGERDBG(CFSTR("Logger CONNECTED"));
+			LOGGERDBG(CFSTR("FPLoggerClient CONNECTED"));
 			logger->connected = YES;
 			LoggerStopBonjourBrowsing(logger);
 			LoggerStopReconnectTimer(logger);
@@ -1993,7 +1993,7 @@ static void LoggerWriteStreamCallback(CFWriteStreamRef ws, CFStreamEventType eve
 			
 		case kCFStreamEventErrorOccurred: {
 			CFErrorRef error = CFWriteStreamCopyError(ws);
-			LOGGERDBG(CFSTR("Logger stream error: %@"), error);
+			LOGGERDBG(CFSTR("FPLoggerClient stream error: %@"), error);
 			CFRelease(error);
 			// Fall-thru
 		}
@@ -2041,20 +2041,20 @@ static void LoggerMessageAddTimestamp(CFMutableDataRef encoder)
 	if (gettimeofday(&t, NULL) == 0)
 	{
 #if __LP64__
-		LoggerMessageAddInt64(encoder, t.tv_sec, PART_KEY_TIMESTAMP_S);
-		LoggerMessageAddInt64(encoder, t.tv_usec, PART_KEY_TIMESTAMP_US);
+		LoggerMessageAddInt64(encoder, t.tv_sec, FPLOGGER_PART_KEY_TIMESTAMP_S);
+		LoggerMessageAddInt64(encoder, t.tv_usec, FPLOGGER_PART_KEY_TIMESTAMP_US);
 #else
-		LoggerMessageAddInt32(encoder, t.tv_sec, PART_KEY_TIMESTAMP_S);
-		LoggerMessageAddInt32(encoder, t.tv_usec, PART_KEY_TIMESTAMP_US);
+		LoggerMessageAddInt32(encoder, t.tv_sec, FPLOGGER_PART_KEY_TIMESTAMP_S);
+		LoggerMessageAddInt32(encoder, t.tv_usec, FPLOGGER_PART_KEY_TIMESTAMP_US);
 #endif
 	}
 	else
 	{
 		time_t ts = time(NULL);
 #if __LP64__
-		LoggerMessageAddInt64(encoder, ts, PART_KEY_TIMESTAMP_S);
+		LoggerMessageAddInt64(encoder, ts, FPLOGGER_PART_KEY_TIMESTAMP_S);
 #else
-		LoggerMessageAddInt32(encoder, ts, PART_KEY_TIMESTAMP_S);
+		LoggerMessageAddInt32(encoder, ts, FPLOGGER_PART_KEY_TIMESTAMP_S);
 #endif
 	}
 }
@@ -2073,7 +2073,7 @@ static void LoggerMessageAddTimestampAndThreadID(CFMutableDataRef encoder)
 	if (inMainThread)
 	{
 		hasThreadName = YES;
-		LoggerMessageAddString(encoder, CFSTR("Main thread"), PART_KEY_THREAD_ID);
+		LoggerMessageAddString(encoder, CFSTR("Main thread"), FPLOGGER_PART_KEY_THREAD_ID);
 	}
 	else if ([NSThread isMultiThreaded])
 	{
@@ -2117,7 +2117,7 @@ static void LoggerMessageAddTimestampAndThreadID(CFMutableDataRef encoder)
 		}
 		if (name != nil)
 		{
-			LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)name, PART_KEY_THREAD_ID);
+			LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)name, FPLOGGER_PART_KEY_THREAD_ID);
 			hasThreadName = YES;
 		}
 	}
@@ -2125,9 +2125,9 @@ static void LoggerMessageAddTimestampAndThreadID(CFMutableDataRef encoder)
 	if (!hasThreadName)
 	{
 #if __LP64__
-		LoggerMessageAddInt64(encoder, (int64_t)pthread_self(), PART_KEY_THREAD_ID);
+		LoggerMessageAddInt64(encoder, (int64_t)pthread_self(), FPLOGGER_PART_KEY_THREAD_ID);
 #else
-		LoggerMessageAddInt32(encoder, (int32_t)pthread_self(), PART_KEY_THREAD_ID);
+		LoggerMessageAddInt32(encoder, (int32_t)pthread_self(), FPLOGGER_PART_KEY_THREAD_ID);
 #endif
 	}
 }
@@ -2147,8 +2147,8 @@ static CFMutableDataRef LoggerMessageCreate(int32_t seq)
 			{
 				p[3] = 8;		// size 0x00000008 in big endian
 				p[5] = 1;		// part count 0x0001
-				p[6] = (uint8_t)PART_KEY_MESSAGE_SEQ;
-				p[7] = (uint8_t)PART_TYPE_INT32;
+				p[6] = (uint8_t)FPLOGGER_PART_KEY_MESSAGE_SEQ;
+				p[7] = (uint8_t)FPLOGGER_PART_TYPE_INT32;
 				*(uint32_t *)(p + 8) = htonl(seq);		// ARMv6 and later, x86 processors do just fine with unaligned accesses
 			}
 			else
@@ -2179,7 +2179,7 @@ static void LoggerMessageAddInt32(CFMutableDataRef encoder, int32_t anInt, int k
 	if (p != NULL)
 	{
 		*p++ = (uint8_t)key;
-		*p++ = (uint8_t)PART_TYPE_INT32;
+		*p++ = (uint8_t)FPLOGGER_PART_TYPE_INT32;
 		*(uint32_t *)p = htonl(anInt);		// ARMv6 and later, x86 processors do just fine with unaligned accesses
 	}
 }
@@ -2191,7 +2191,7 @@ static void LoggerMessageAddInt64(CFMutableDataRef encoder, int64_t anInt, int k
 	if (p != NULL)
 	{
 		*p++ = (uint8_t)key;
-		*p++ = (uint8_t)PART_TYPE_INT64;
+		*p++ = (uint8_t)FPLOGGER_PART_TYPE_INT64;
 		uint32_t *q = (uint32_t *)p;
 		*q++ = htonl((uint32_t)(anInt >> 32));	// ARMv6 and later, x86 processors do just fine with unaligned accesses
 		*q = htonl((uint32_t)anInt);
@@ -2226,7 +2226,7 @@ static void LoggerMessageAddCString(CFMutableDataRef data, const char *aString, 
 			if (p != NULL)
 			{
 				*p++ = (uint8_t)key;
-				*p++ = (uint8_t)PART_TYPE_STRING;
+				*p++ = (uint8_t)FPLOGGER_PART_TYPE_STRING;
 				*(uint32_t *)p = htonl(n);		// ARMv6 and later, x86 processors do just fine with unaligned accesses
 				memcpy(p + 4, buf, (size_t)n);
 			}
@@ -2260,7 +2260,7 @@ static void LoggerMessageAddString(CFMutableDataRef encoder, CFStringRef aString
 	if (p != NULL)
 	{
 		*p++ = (uint8_t)key;
-		*p++ = (uint8_t)PART_TYPE_STRING;
+		*p++ = (uint8_t)FPLOGGER_PART_TYPE_STRING;
 		*(uint32_t *)p = htonl(partSize);		// ARMv6 and later, x86 processors do just fine with unaligned accesses
 		if (partSize && bytes != NULL)
 			memcpy(p + 4, bytes, (size_t)partSize);
@@ -2297,7 +2297,7 @@ static uint32_t LoggerMessageGetSeq(CFDataRef message)
 	uint16_t partCount = ntohs(*(uint16_t *)p);
 	if (partCount)
 	{
-		if (p[2] == PART_KEY_MESSAGE_SEQ)
+		if (p[2] == FPLOGGER_PART_KEY_MESSAGE_SEQ)
 			return ntohl(*(uint32_t *)(p+4));		// ARMv6 and later, x86 processors do just fine with unaligned accesses
 	}
 	return 0;
@@ -2307,7 +2307,7 @@ static uint32_t LoggerMessageGetSeq(CFDataRef message)
 #pragma mark -
 #pragma mark Private logging functions
 // -----------------------------------------------------------------------------
-static void	LoggerPushClientInfoToFrontOfQueue(Logger *logger)
+static void	LoggerPushClientInfoToFrontOfQueue(FPLoggerClient *logger)
 {
 	// Extract client information from the main bundle, as well as platform info,
 	// and assemble it to a message that will be put in front of the queue
@@ -2320,14 +2320,14 @@ static void	LoggerPushClientInfoToFrontOfQueue(Logger *logger)
 	CFMutableDataRef encoder = LoggerMessageCreate(0);
 	if (encoder != NULL)
 	{
-		LoggerMessageAddInt32(encoder, LOGMSG_TYPE_CLIENTINFO, PART_KEY_MESSAGE_TYPE);
+		LoggerMessageAddInt32(encoder, FPLOGGER_LOGMSG_TYPE_CLIENTINFO, FPLOGGER_PART_KEY_MESSAGE_TYPE);
 
 		CFStringRef version = (CFStringRef)CFBundleGetValueForInfoDictionaryKey(bundle, kCFBundleVersionKey);
 		if (version != NULL && CFGetTypeID(version) == CFStringGetTypeID())
-			LoggerMessageAddString(encoder, version, PART_KEY_CLIENT_VERSION);
+			LoggerMessageAddString(encoder, version, FPLOGGER_PART_KEY_CLIENT_VERSION);
 		CFStringRef name = (CFStringRef)CFBundleGetValueForInfoDictionaryKey(bundle, kCFBundleNameKey);
 		if (name != NULL)
-			LoggerMessageAddString(encoder, name, PART_KEY_CLIENT_NAME);
+			LoggerMessageAddString(encoder, name, FPLOGGER_PART_KEY_CLIENT_NAME);
 
 #if TARGET_OS_IPHONE && ALLOW_COCOA_USE
 		if ([NSThread isMultiThreaded] || [NSThread isMainThread])
@@ -2335,10 +2335,10 @@ static void	LoggerPushClientInfoToFrontOfQueue(Logger *logger)
 			@autoreleasepool
 			{
 				UIDevice *device = [UIDevice currentDevice];
-				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)device.name, PART_KEY_UNIQUEID);
-				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)device.systemVersion, PART_KEY_OS_VERSION);
-				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)device.systemName, PART_KEY_OS_NAME);
-				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)device.model, PART_KEY_CLIENT_MODEL);
+				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)device.name, FPLOGGER_PART_KEY_UNIQUEID);
+				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)device.systemVersion, FPLOGGER_PART_KEY_OS_VERSION);
+				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)device.systemName, FPLOGGER_PART_KEY_OS_NAME);
+				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)device.model, FPLOGGER_PART_KEY_CLIENT_MODEL);
 			}
 		}
 #elif TARGET_OS_MAC
@@ -2376,8 +2376,8 @@ static void	LoggerPushClientInfoToFrontOfQueue(Logger *logger)
 				osVersion = CFSTR("");
 			}
 		}
-		LoggerMessageAddString(encoder, osVersion, PART_KEY_OS_VERSION);
-		LoggerMessageAddString(encoder, osName, PART_KEY_OS_NAME);
+		LoggerMessageAddString(encoder, osVersion, FPLOGGER_PART_KEY_OS_VERSION);
+		LoggerMessageAddString(encoder, osName, FPLOGGER_PART_KEY_OS_NAME);
 		CFRelease(osVersion);
 		CFRelease(osName);
 
@@ -2394,7 +2394,7 @@ static void	LoggerPushClientInfoToFrontOfQueue(Logger *logger)
 		sysctlbyname("hw.machine", buf+strlen(buf), &len, NULL, 0);
 		
 		CFStringRef s = CFStringCreateWithCString(NULL, buf, kCFStringEncodingASCII);
-		LoggerMessageAddString(encoder, s, PART_KEY_CLIENT_MODEL);
+		LoggerMessageAddString(encoder, s, FPLOGGER_PART_KEY_CLIENT_MODEL);
 		CFRelease(s);
 #endif
 		LoggerMessageFinalize(encoder);
@@ -2407,7 +2407,7 @@ static void	LoggerPushClientInfoToFrontOfQueue(Logger *logger)
 	}
 }
 
-static void LoggerPushMessageToQueue(Logger *logger, CFDataRef message)
+static void LoggerPushMessageToQueue(FPLoggerClient *logger, CFDataRef message)
 {
 	// Add the message to the log queue and signal the runLoop source that will trigger
 	// a send on the worker thread.
@@ -2453,7 +2453,7 @@ static void LoggerPushMessageToQueue(Logger *logger, CFDataRef message)
 	}
 }
 
-static void LogMessageRawTo_internal(Logger *logger,
+static void LogMessageRawTo_internal(FPLoggerClient *logger,
 								  const char *filename,
 								  int lineNumber,
 								  const char *functionName,
@@ -2471,21 +2471,21 @@ static void LogMessageRawTo_internal(Logger *logger,
         CFMutableDataRef encoder = LoggerMessageCreate(seq);
         if (encoder != NULL)
         {
-            LoggerMessageAddInt32(encoder, LOGMSG_TYPE_LOG, PART_KEY_MESSAGE_TYPE);
+            LoggerMessageAddInt32(encoder, FPLOGGER_LOGMSG_TYPE_LOG, FPLOGGER_PART_KEY_MESSAGE_TYPE);
             if (domain != nil && [domain length])
-                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)domain, PART_KEY_TAG);
+                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)domain, FPLOGGER_PART_KEY_TAG);
             if (level)
-                LoggerMessageAddInt32(encoder, level, PART_KEY_LEVEL);
+                LoggerMessageAddInt32(encoder, level, FPLOGGER_PART_KEY_LEVEL);
             if (filename != NULL)
-                LoggerMessageAddCString(encoder, filename, PART_KEY_FILENAME);
+                LoggerMessageAddCString(encoder, filename, FPLOGGER_PART_KEY_FILENAME);
             if (lineNumber)
-                LoggerMessageAddInt32(encoder, lineNumber, PART_KEY_LINENUMBER);
+                LoggerMessageAddInt32(encoder, lineNumber, FPLOGGER_PART_KEY_LINENUMBER);
             if (functionName != NULL)
-                LoggerMessageAddCString(encoder, functionName, PART_KEY_FUNCTIONNAME);
+                LoggerMessageAddCString(encoder, functionName, FPLOGGER_PART_KEY_FUNCTIONNAME);
             if (message != nil)
-                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)message, PART_KEY_MESSAGE);
+                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)message, FPLOGGER_PART_KEY_MESSAGE);
 			else
-				LoggerMessageAddString(encoder, CFSTR(""), PART_KEY_MESSAGE);
+				LoggerMessageAddString(encoder, CFSTR(""), FPLOGGER_PART_KEY_MESSAGE);
 
 			LoggerMessageFinalize(encoder);
             LoggerPushMessageToQueue(logger, encoder);
@@ -2498,7 +2498,7 @@ static void LogMessageRawTo_internal(Logger *logger,
     }
 }
 
-static void LogMessageTo_internal(Logger *logger,
+static void LogMessageTo_internal(FPLoggerClient *logger,
 								  const char *filename,
 								  int lineNumber,
 								  const char *functionName,
@@ -2516,31 +2516,31 @@ static void LogMessageTo_internal(Logger *logger,
         CFMutableDataRef encoder = LoggerMessageCreate(seq);
         if (encoder != NULL)
         {
-            LoggerMessageAddInt32(encoder, LOGMSG_TYPE_LOG, PART_KEY_MESSAGE_TYPE);
+            LoggerMessageAddInt32(encoder, FPLOGGER_LOGMSG_TYPE_LOG, FPLOGGER_PART_KEY_MESSAGE_TYPE);
             if (domain != nil && [domain length])
-                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)domain, PART_KEY_TAG);
+                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)domain, FPLOGGER_PART_KEY_TAG);
             if (level)
-                LoggerMessageAddInt32(encoder, level, PART_KEY_LEVEL);
+                LoggerMessageAddInt32(encoder, level, FPLOGGER_PART_KEY_LEVEL);
             if (filename != NULL)
-                LoggerMessageAddCString(encoder, filename, PART_KEY_FILENAME);
+                LoggerMessageAddCString(encoder, filename, FPLOGGER_PART_KEY_FILENAME);
             if (lineNumber)
-                LoggerMessageAddInt32(encoder, lineNumber, PART_KEY_LINENUMBER);
+                LoggerMessageAddInt32(encoder, lineNumber, FPLOGGER_PART_KEY_LINENUMBER);
             if (functionName != NULL)
-                LoggerMessageAddCString(encoder, functionName, PART_KEY_FUNCTIONNAME);
+                LoggerMessageAddCString(encoder, functionName, FPLOGGER_PART_KEY_FUNCTIONNAME);
 
 #if ALLOW_COCOA_USE
             // Go though NSString to avoid low-level logging of CF datastructures (i.e. too detailed NSDictionary, etc)
             NSString *msgString = [[NSString alloc] initWithFormat:format arguments:args];
             if (msgString != nil)
             {
-                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)msgString, PART_KEY_MESSAGE);
+                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)msgString, FPLOGGER_PART_KEY_MESSAGE);
                 RELEASE_NSOBJECT(msgString);
             }
 #else
             CFStringRef msgString = CFStringCreateWithFormatAndArguments(NULL, NULL, (CFStringRef)format, args);
             if (msgString != NULL)
             {
-                LoggerMessageAddString(encoder, msgString, PART_KEY_MESSAGE);
+                LoggerMessageAddString(encoder, msgString, FPLOGGER_PART_KEY_MESSAGE);
                 CFRelease(msgString);
             }
 #endif
@@ -2556,7 +2556,7 @@ static void LogMessageTo_internal(Logger *logger,
     }
 }
 
-static void LogImageTo_internal(Logger *logger,
+static void LogImageTo_internal(FPLoggerClient *logger,
 								const char *filename,
 								int lineNumber,
 								const char *functionName,
@@ -2575,23 +2575,23 @@ static void LogImageTo_internal(Logger *logger,
 		CFMutableDataRef encoder = LoggerMessageCreate(seq);
 		if (encoder != NULL)
 		{
-			LoggerMessageAddInt32(encoder, LOGMSG_TYPE_LOG, PART_KEY_MESSAGE_TYPE);
+			LoggerMessageAddInt32(encoder, FPLOGGER_LOGMSG_TYPE_LOG, FPLOGGER_PART_KEY_MESSAGE_TYPE);
 			if (domain != nil && [domain length])
-				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)domain, PART_KEY_TAG);
+				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)domain, FPLOGGER_PART_KEY_TAG);
 			if (level)
-				LoggerMessageAddInt32(encoder, level, PART_KEY_LEVEL);
+				LoggerMessageAddInt32(encoder, level, FPLOGGER_PART_KEY_LEVEL);
 			if (width && height)
 			{
-				LoggerMessageAddInt32(encoder, width, PART_KEY_IMAGE_WIDTH);
-				LoggerMessageAddInt32(encoder, height, PART_KEY_IMAGE_HEIGHT);
+				LoggerMessageAddInt32(encoder, width, FPLOGGER_PART_KEY_IMAGE_WIDTH);
+				LoggerMessageAddInt32(encoder, height, FPLOGGER_PART_KEY_IMAGE_HEIGHT);
 			}
 			if (filename != NULL)
-				LoggerMessageAddCString(encoder, filename, PART_KEY_FILENAME);
+				LoggerMessageAddCString(encoder, filename, FPLOGGER_PART_KEY_FILENAME);
 			if (lineNumber)
-				LoggerMessageAddInt32(encoder, lineNumber, PART_KEY_LINENUMBER);
+				LoggerMessageAddInt32(encoder, lineNumber, FPLOGGER_PART_KEY_LINENUMBER);
 			if (functionName != NULL)
-				LoggerMessageAddCString(encoder, functionName, PART_KEY_FUNCTIONNAME);
-			LoggerMessageAddData(encoder, (CAST_TO_CFDATA)data, PART_KEY_MESSAGE, PART_TYPE_IMAGE);
+				LoggerMessageAddCString(encoder, functionName, FPLOGGER_PART_KEY_FUNCTIONNAME);
+			LoggerMessageAddData(encoder, (CAST_TO_CFDATA)data, FPLOGGER_PART_KEY_MESSAGE, FPLOGGER_PART_TYPE_IMAGE);
 
 			LoggerMessageFinalize(encoder);
 			LoggerPushMessageToQueue(logger, encoder);
@@ -2604,7 +2604,7 @@ static void LogImageTo_internal(Logger *logger,
 	}
 }
 
-static void LogDataTo_internal(Logger *logger,
+static void LogDataTo_internal(FPLoggerClient *logger,
 							   const char *filename,
 							   int lineNumber,
 							   const char *functionName,
@@ -2620,18 +2620,18 @@ static void LogDataTo_internal(Logger *logger,
         CFMutableDataRef encoder = LoggerMessageCreate(seq);
         if (encoder != NULL)
         {
-            LoggerMessageAddInt32(encoder, LOGMSG_TYPE_LOG, PART_KEY_MESSAGE_TYPE);
+            LoggerMessageAddInt32(encoder, FPLOGGER_LOGMSG_TYPE_LOG, FPLOGGER_PART_KEY_MESSAGE_TYPE);
             if (domain != nil && [domain length])
-                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)domain, PART_KEY_TAG);
+                LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)domain, FPLOGGER_PART_KEY_TAG);
             if (level)
-                LoggerMessageAddInt32(encoder, level, PART_KEY_LEVEL);
+                LoggerMessageAddInt32(encoder, level, FPLOGGER_PART_KEY_LEVEL);
             if (filename != NULL)
-                LoggerMessageAddCString(encoder, filename, PART_KEY_FILENAME);
+                LoggerMessageAddCString(encoder, filename, FPLOGGER_PART_KEY_FILENAME);
             if (lineNumber)
-                LoggerMessageAddInt32(encoder, lineNumber, PART_KEY_LINENUMBER);
+                LoggerMessageAddInt32(encoder, lineNumber, FPLOGGER_PART_KEY_LINENUMBER);
             if (functionName != NULL)
-                LoggerMessageAddCString(encoder, functionName, PART_KEY_FUNCTIONNAME);
-            LoggerMessageAddData(encoder, (CAST_TO_CFDATA)data, PART_KEY_MESSAGE, PART_TYPE_BINARY);
+                LoggerMessageAddCString(encoder, functionName, FPLOGGER_PART_KEY_FUNCTIONNAME);
+            LoggerMessageAddData(encoder, (CAST_TO_CFDATA)data, FPLOGGER_PART_KEY_MESSAGE, FPLOGGER_PART_TYPE_BINARY);
 
 			LoggerMessageFinalize(encoder);
             LoggerPushMessageToQueue(logger, encoder);
@@ -2644,7 +2644,7 @@ static void LogDataTo_internal(Logger *logger,
     }
 }
 
-static void LogStartBlockTo_internal(Logger *logger, NSString *format, va_list args)
+static void LogStartBlockTo_internal(FPLoggerClient *logger, NSString *format, va_list args)
 {
 	logger = LoggerStart(logger);		// start if needed
 	if (logger)
@@ -2655,13 +2655,13 @@ static void LogStartBlockTo_internal(Logger *logger, NSString *format, va_list a
 		CFMutableDataRef encoder = LoggerMessageCreate(seq);
 		if (encoder != NULL)
 		{
-			LoggerMessageAddInt32(encoder, LOGMSG_TYPE_BLOCKSTART, PART_KEY_MESSAGE_TYPE);
+			LoggerMessageAddInt32(encoder, FPLOGGER_LOGMSG_TYPE_BLOCKSTART, FPLOGGER_PART_KEY_MESSAGE_TYPE);
 			if (format != nil)
 			{
 				CFStringRef msgString = CFStringCreateWithFormatAndArguments(NULL, NULL, (CAST_TO_CFSTRING)format, args);
 				if (msgString != NULL)
 				{
-					LoggerMessageAddString(encoder, msgString, PART_KEY_MESSAGE);
+					LoggerMessageAddString(encoder, msgString, FPLOGGER_PART_KEY_MESSAGE);
 					CFRelease(msgString);
 				}
 			}
@@ -2687,7 +2687,7 @@ void LogMessageRawF(const char *filename, int lineNumber, const char *functionNa
 	LogMessageRawTo_internal(NULL, filename, lineNumber, functionName, domain, level, message);
 }
 
-void LogMessageRawToF(Logger *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *message)
+void LogMessageRawToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *message)
 {
 	LogMessageRawTo_internal(logger, filename, lineNumber, functionName, domain, level, message);
 }
@@ -2700,7 +2700,7 @@ void LogMessageCompat(NSString *format, ...)
 	va_end(args);
 }
 
-void LogMessageTo(Logger *logger, NSString *domain, int level, NSString *format, ...)
+void LogMessageTo(FPLoggerClient *logger, NSString *domain, int level, NSString *format, ...)
 {
 	va_list args;
 	va_start(args, format);
@@ -2708,7 +2708,7 @@ void LogMessageTo(Logger *logger, NSString *domain, int level, NSString *format,
 	va_end(args);
 }
 
-void LogMessageToF(Logger *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, ...)
+void LogMessageToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, ...)
 {
 	va_list args;
 	va_start(args, format);
@@ -2716,12 +2716,12 @@ void LogMessageToF(Logger *logger, const char *filename, int lineNumber, const c
 	va_end(args);
 }
 
-void LogMessageTo_va(Logger *logger, NSString *domain, int level, NSString *format, va_list args)
+void LogMessageTo_va(FPLoggerClient *logger, NSString *domain, int level, NSString *format, va_list args)
 {
 	LogMessageTo_internal(logger, NULL, 0, NULL, domain, level, format, args);
 }
 
-void LogMessageToF_va(Logger *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, va_list args)
+void LogMessageToF_va(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSString *format, va_list args)
 {
 	LogMessageTo_internal(logger, filename, lineNumber, functionName, domain, level, format, args);
 }
@@ -2762,12 +2762,12 @@ void LogDataF(const char *filename, int lineNumber, const char *functionName, NS
 	LogDataTo_internal(NULL, filename, lineNumber, functionName, domain, level, data);
 }
 
-void LogDataTo(Logger *logger, NSString *domain, int level, NSData *data)
+void LogDataTo(FPLoggerClient *logger, NSString *domain, int level, NSData *data)
 {
 	LogDataTo_internal(logger, NULL, 0, NULL, domain, level, data);
 }
 
-void LogDataToF(Logger *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSData *data)
+void LogDataToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, NSData *data)
 {
 	LogDataTo_internal(logger, filename, lineNumber, functionName, domain, level, data);
 }
@@ -2782,12 +2782,12 @@ void LogImageDataF(const char *filename, int lineNumber, const char *functionNam
 	LogImageTo_internal(NULL, filename, lineNumber, functionName, domain, level, width, height, data);
 }
 
-void LogImageDataTo(Logger *logger, NSString *domain, int level, int width, int height, NSData *data)
+void LogImageDataTo(FPLoggerClient *logger, NSString *domain, int level, int width, int height, NSData *data)
 {
 	LogImageTo_internal(logger, NULL, 0, NULL, domain, level, width, height, data);
 }
 
-void LogImageDataToF(Logger *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, int width, int height, NSData *data)
+void LogImageDataToF(FPLoggerClient *logger, const char *filename, int lineNumber, const char *functionName, NSString *domain, int level, int width, int height, NSData *data)
 {
 	LogImageTo_internal(logger, filename, lineNumber, functionName, domain, level, width, height, data);
 }
@@ -2800,7 +2800,7 @@ void LogStartBlock(NSString *format, ...)
 	va_end(args);
 }
 
-void LogStartBlockTo(Logger *logger, NSString *format, ...)
+void LogStartBlockTo(FPLoggerClient *logger, NSString *format, ...)
 {
 	va_list args;
 	va_start(args, format);
@@ -2808,7 +2808,7 @@ void LogStartBlockTo(Logger *logger, NSString *format, ...)
 	va_end(args);
 }
 
-void LogEndBlockTo(Logger *logger)
+void LogEndBlockTo(FPLoggerClient *logger)
 {
 	logger = LoggerStart(logger);
     if (logger)
@@ -2822,7 +2822,7 @@ void LogEndBlockTo(Logger *logger)
         CFMutableDataRef encoder = LoggerMessageCreate(seq);
         if (encoder != NULL)
         {
-            LoggerMessageAddInt32(encoder, LOGMSG_TYPE_BLOCKEND, PART_KEY_MESSAGE_TYPE);
+            LoggerMessageAddInt32(encoder, FPLOGGER_LOGMSG_TYPE_BLOCKEND, FPLOGGER_PART_KEY_MESSAGE_TYPE);
 			LoggerMessageFinalize(encoder);
             LoggerPushMessageToQueue(logger, encoder);
             CFRelease(encoder);
@@ -2839,7 +2839,7 @@ void LogEndBlock(void)
 	LogEndBlockTo(NULL);
 }
 
-void LogMarkerTo(Logger *logger, NSString *text)
+void LogMarkerTo(FPLoggerClient *logger, NSString *text)
 {
 	logger = LoggerStart(logger);		// start if needed
 	if (logger != NULL)
@@ -2850,7 +2850,7 @@ void LogMarkerTo(Logger *logger, NSString *text)
 		CFMutableDataRef encoder = LoggerMessageCreate(seq);
 		if (encoder != NULL)
 		{
-			LoggerMessageAddInt32(encoder, LOGMSG_TYPE_MARK, PART_KEY_MESSAGE_TYPE);
+			LoggerMessageAddInt32(encoder, FPLOGGER_LOGMSG_TYPE_MARK, FPLOGGER_PART_KEY_MESSAGE_TYPE);
 			if (text == nil)
 			{
 				CFDateFormatterRef df = CFDateFormatterCreate(NULL, NULL, kCFDateFormatterShortStyle, kCFDateFormatterMediumStyle);
@@ -2858,13 +2858,13 @@ void LogMarkerTo(Logger *logger, NSString *text)
 				CFRelease(df);
 				if (str != NULL)
 				{
-					LoggerMessageAddString(encoder, str, PART_KEY_MESSAGE);
+					LoggerMessageAddString(encoder, str, FPLOGGER_PART_KEY_MESSAGE);
 					CFRelease(str);
 				}
 			}
 			else
 			{
-				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)text, PART_KEY_MESSAGE);
+				LoggerMessageAddString(encoder, (CAST_TO_CFSTRING)text, FPLOGGER_PART_KEY_MESSAGE);
 			}
 			LoggerMessageFinalize(encoder);
 			LoggerPushMessageToQueue(logger, encoder);
